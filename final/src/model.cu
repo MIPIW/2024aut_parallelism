@@ -195,6 +195,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
       Embedding(batchInput, emb_w, emb_a);
 
+      printf("-------------%d--------------", 3);
       /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
       Permute(emb_a, permute_a);
 

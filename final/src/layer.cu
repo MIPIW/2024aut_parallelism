@@ -62,19 +62,20 @@
  * 'H' is the embedding dimension
  */
 void Embedding(int *in, Tensor* w, Tensor *out) {
-  size_t b = out->shape[0];
-  size_t s = out->shape[1];
-  size_t H = out->shape[2];
+  size_t b = out->shape[0];  // Batch size
+  size_t s = out->shape[1];  // Sequence length
+  size_t H = out->shape[2];  // Hidden dimension
 
-  for (size_t k = 0; k < b; ++k){
-    for (size_t i = 0; i < s; i++) {
-      for (size_t j = 0; j < H; j++) {
-        //do something instead of the following line
-        out->buf[i * H + j] = w->buf[in[i] * H + j];
+  for (size_t k = 0; k < b; ++k) { // Iterate over batches
+    for (size_t i = 0; i < s; ++i) { // Iterate over sequence length
+      int vocab_idx = in[k * s + i]; // Input index for the current batch and sequence position
+      for (size_t j = 0; j < H; ++j) { // Iterate over hidden dimensions
+        out->buf[k * (s * H) + i * H + j] = w->buf[vocab_idx * H + j];
       }
-    }    
+    }
   }
 }
+
 
 /* Permute
  * @param [in]   in: [M, N]
