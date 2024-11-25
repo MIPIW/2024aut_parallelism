@@ -192,61 +192,63 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
     int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
 
+      /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
+      Embedding(batchInput, emb_w, emb_a);
 
-    // Perform embedding for the batch
-    Embedding(batchInput, emb_w, &batch_emb_a);
+      /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
+      Permute(emb_a, permute_a);
 
-    // Permute
-    Permute(&batch_emb_a, &batch_permute_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
+      Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
+      ReLU(conv0_a);
 
-    // Apply convolutional and pooling operations
-    Conv1D(&batch_permute_a, conv0_w, conv0_b, &batch_conv0_a);
-    ReLU(&batch_conv0_a);
-    GetMax(&batch_conv0_a, &batch_pool0_a);
+      /* in [1024, SEQ_LEN - 2] -> out [1024] */
+      GetMax(conv0_a, pool0_a);
 
-    Conv1D(&batch_permute_a, conv1_w, conv1_b, &batch_conv1_a);
-    ReLU(&batch_conv1_a);
-    GetMax(&batch_conv1_a, &batch_pool1_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
+      Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
+      ReLU(conv1_a);
 
-    Conv1D(&batch_permute_a, conv2_w, conv2_b, &batch_conv2_a);
-    ReLU(&batch_conv2_a);
-    GetMax(&batch_conv2_a, &batch_pool2_a);
+      /* in [1024, SEQ_LEN - 4] -> out [1024] */
+      GetMax(conv1_a, pool1_a);
 
-    Conv1D(&batch_permute_a, conv3_w, conv3_b, &batch_conv3_a);
-    ReLU(&batch_conv3_a);
-    GetMax(&batch_conv3_a, &batch_pool3_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
+      Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
+      ReLU(conv2_a);
 
-    // Concatenate pooled features
-    Concat(&batch_pool0_a, &batch_pool1_a, &batch_pool2_a, &batch_pool3_a, &batch_concat_a);
+      /* in [1024, SEQ_LEN - 6] -> out [1024] */
+      GetMax(conv2_a, pool2_a);
 
-    // Fully connected layers
-    Linear(&batch_concat_a, linear0_w, linear0_b, &batch_linear0_a);
-    ReLU(&batch_linear0_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
+      Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
+      ReLU(conv3_a);
 
-    Linear(&batch_linear0_a, linear1_w, linear1_b, &batch_linear1_a);
-    ReLU(&batch_linear1_a);
+      /* in [1024, SEQ_LEN - 8] -> out [1024] */
+      GetMax(conv3_a, pool3_a);
 
-    Linear(&batch_linear1_a, linear2_w, linear2_b, &batch_linear2_a);
-    ReLU(&batch_linear2_a);
+      /* in [1024] +
+            [1024] +
+            [1024] +
+            [1024] -> out [1024 * 4] */
+      Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
 
-    Linear(&batch_linear2_a, linear3_w, linear3_b, &batch_linear3_a);
+      /* in [1024 * 4] -> out [2048] */
+      Linear(concat_a, linear0_w, linear0_b, linear0_a);
+      ReLU(linear0_a);
 
-    // Copy the computation result to the local outputs
+      /* in [2048] -> out [1024] */
+      Linear(linear0_a, linear1_w, linear1_b, linear1_a);
+      ReLU(linear1_a);
+
+      /* in [1024] -> out [512] */
+      Linear(linear1_a, linear2_w, linear2_b, linear2_a);
+      ReLU(linear2_a);
+
+      /* in [512] -> out [2] */
+      Linear(linear2_a, linear3_w, linear3_b, linear3_a);
+
+
     memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, batch_linear3_a.buf, BATCH_SIZE * 2 * sizeof(float));
-
-    // Free intermediate memory for this batch
-    free(batch_emb_a.buf);
-    free(batch_permute_a.buf);
-    free(batch_pool0_a.buf);
-    free(batch_pool1_a.buf);
-    free(batch_pool2_a.buf);
-    free(batch_pool3_a.buf);
-    free(batch_concat_a.buf);
-    free(batch_linear0_a.buf);
-    free(batch_linear1_a.buf);
-    free(batch_linear2_a.buf);
-    free(batch_linear3_a.buf);
-    
   }
 
   // Gather outputs from all nodes

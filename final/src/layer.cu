@@ -62,13 +62,17 @@
  * 'H' is the embedding dimension
  */
 void Embedding(int *in, Tensor* w, Tensor *out) {
-  size_t s = out->shape[0];
-  size_t H = out->shape[1];
+  size_t b = out->shape[0];
+  size_t s = out->shape[1];
+  size_t H = out->shape[2];
 
-  for (size_t i = 0; i < s; i++) {
-    for (size_t j = 0; j < H; j++) {
-      out->buf[i * H + j] = w->buf[in[i] * H + j];
-    }
+  for (size_t k = 0; k < b; ++k){
+    for (size_t i = 0; i < s; i++) {
+      for (size_t j = 0; j < H; j++) {
+        //do something instead of the following line
+        out->buf[i * H + j] = w->buf[in[i] * H + j];
+      }
+    }    
   }
 }
 
