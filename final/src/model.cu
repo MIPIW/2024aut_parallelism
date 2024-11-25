@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <cuda_runtime.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 /* [Model Parameters]
@@ -145,10 +146,9 @@ void free_activations() {
   delete linear3_a;
 }
 
-const size_t BATCH_SIZE = 16;
+const size_t BATCH_SIZE = 2;
 const int NUM_GPUES_PER_NODE = 4;
 const int NUM_THREADS_PER_NODE = 4;
-const int NUM_NODES = 4;
 
 typedef struct {
   int gpu_id;
@@ -165,24 +165,22 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
   // Calculate the number of samples per node
+  // samples must be # of power of 2
   size_t samples_per_node = n_samples / mpi_size;
-  printf("-------------------%d------------------", mpi_size);
-
-  size_t start_idx = mpi_rank * samples_per_node;
-  size_t end_idx = fmin(start_idx + samples_per_node, n_samples);
-
+  // size_t start_idx = mpi_rank * samples_per_node;
+  // size_t end_idx = (mpi_rank + 1) * samples_per_node;
   // Allocate local buffers for input and output using cudaMallocHost
-  size_t local_n_samples = end_idx - start_idx;
   int *local_inputs = nullptr;
   float *local_outputs = nullptr;
 
   // Use cudaMallocHost for pinned memory
-  cudaMallocHost(&local_inputs, local_n_samples * SEQ_LEN * sizeof(int));
-  cudaMallocHost(&local_outputs, local_n_samples * N_CLASSES * sizeof(float));
+  //여기가 아닌것같은데 
+  // cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
+  // cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
 
   // Scatter input data to all nodes
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
-              local_n_samples * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
+              samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
 
   // initializing tensor in each node.
@@ -203,7 +201,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   batch_linear2_a.assign({BATCH_SIZE, 512});
   batch_linear3_a.assign({BATCH_SIZE, 2});
 
-  // Initialize shapes for intermediate tensors
+  // malloc -> cudaMallocHost
   batch_emb_a.buf = (float *)malloc(batch_emb_a.getNumParams() * sizeof(float));
   batch_permute_a.buf = (float *)malloc(batch_permute_a.getNumParams() * sizeof(float));
   batch_pool0_a.buf = (float *)malloc(batch_pool0_a.getNumParams() * sizeof(float));
@@ -216,17 +214,13 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   batch_linear2_a.buf = (float *)malloc(batch_linear2_a.getNumParams()  * sizeof(float));
   batch_linear3_a.buf = (float *)malloc(batch_linear3_a.getNumParams()  * sizeof(float));
 
+  size_t num_batches = samples_per_node / BATCH_SIZE;
+  for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
+    int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
 
-  // Compute sentiment for the assigned subset in batches
-  for (size_t batch_start = 0; batch_start < local_n_samples; batch_start += BATCH_SIZE) {
-    size_t batch_end = fmin(batch_start + BATCH_SIZE, local_n_samples);
-    size_t current_batch_size = batch_end - batch_start;
-
-    int *batch_inputs = local_inputs + batch_start * SEQ_LEN;
- 
 
     // Perform embedding for the batch
-    Embedding(batch_inputs, emb_w, &batch_emb_a);
+    Embedding(batchInput, emb_w, &batch_emb_a);
 
     // Permute
     Permute(&batch_emb_a, &batch_permute_a);
@@ -264,7 +258,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
     Linear(&batch_linear2_a, linear3_w, linear3_b, &batch_linear3_a);
 
     // Copy the computation result to the local outputs
-    memcpy(local_outputs + batch_start * 2, batch_linear3_a.buf, current_batch_size * 2 * sizeof(float));
+    memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, batch_linear3_a.buf, BATCH_SIZE * 2 * sizeof(float));
 
     // Free intermediate memory for this batch
     free(batch_emb_a.buf);
@@ -278,13 +272,14 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
     free(batch_linear1_a.buf);
     free(batch_linear2_a.buf);
     free(batch_linear3_a.buf);
+    
   }
 
   // Gather outputs from all nodes
-  MPI_Gather(local_outputs, local_n_samples * 2, MPI_FLOAT, outputs,
+  MPI_Gather(local_outputs, samples_per_node * 2, MPI_FLOAT, outputs,
             samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
   // Free local buffers
-  cudaFreeHost(local_inputs);
-  cudaFreeHost(local_outputs);
+  // cudaFreeHost(local_inputs);
+  // cudaFreeHost(local_outputs);
   }

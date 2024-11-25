@@ -34,14 +34,15 @@ struct Tensor {
     for(size_t i = 0; i < ndim ; ++i){
       shape[i] = shape_[i];
     }
-    buf = nullptr
-  }
+    buf = nullptr;
+  };
+
   size_t getNumParams(){
     size_t elems = 1;
     for (size_t i = 0; i<ndim; ++i){
       elems *= shape[i];
     };
-    return elems
+    return elems;
   };
 };
 
