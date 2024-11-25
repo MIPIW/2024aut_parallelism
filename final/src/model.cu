@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <stdlib.h>
 #include <string.h>
-
+#define BATCH_SIZE 2
 
 /* [Model Parameters]
  * _w: Weight parameter
@@ -111,21 +111,21 @@ Activation *concat_a;
 Activation *linear0_a, *linear1_a, *linear2_a, *linear3_a;
 
 void alloc_activations() {
-  emb_a = new Activation({SEQ_LEN, 4096});
-  permute_a = new Activation({4096, SEQ_LEN});
-  conv0_a = new Activation({1024, SEQ_LEN - 2});
-  pool0_a = new Activation({1024});
-  conv1_a = new Activation({1024, SEQ_LEN - 4});
-  pool1_a = new Activation({1024});
-  conv2_a = new Activation({1024, SEQ_LEN - 6});
-  pool2_a = new Activation({1024});
-  conv3_a = new Activation({1024, SEQ_LEN - 8});
-  pool3_a = new Activation({1024});
-  concat_a = new Activation({4096});
-  linear0_a = new Activation({2048});
-  linear1_a = new Activation({1024});
-  linear2_a = new Activation({512});
-  linear3_a = new Activation({2});
+  emb_a = new Activation({BATCH_SIZE, SEQ_LEN, 4096});
+  permute_a = new Activation({BATCH_SIZE, 4096, SEQ_LEN});
+  conv0_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 2});
+  pool0_a = new Activation({BATCH_SIZE, 1024});
+  conv1_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 4});
+  pool1_a = new Activation({BATCH_SIZE, 1024});
+  conv2_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 6});
+  pool2_a = new Activation({BATCH_SIZE, 1024});
+  conv3_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 8});
+  pool3_a = new Activation({BATCH_SIZE, 1024});
+  concat_a = new Activation({BATCH_SIZE, 4096});
+  linear0_a = new Activation({BATCH_SIZE, 2048});
+  linear1_a = new Activation({BATCH_SIZE, 1024});
+  linear2_a = new Activation({BATCH_SIZE, 512});
+  linear3_a = new Activation({BATCH_SIZE, 2});
 }
 
 void free_activations() {
@@ -146,7 +146,6 @@ void free_activations() {
   delete linear3_a;
 }
 
-const size_t BATCH_SIZE = 2;
 const int NUM_GPUES_PER_NODE = 4;
 const int NUM_THREADS_PER_NODE = 4;
 
@@ -188,31 +187,6 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   Tensor batch_conv1_a, batch_pool1_a, batch_conv2_a, batch_pool2_a;
   Tensor batch_conv3_a, batch_pool3_a, batch_concat_a;
   Tensor batch_linear0_a, batch_linear1_a, batch_linear2_a, batch_linear3_a;
-
-  batch_emb_a.assign({BATCH_SIZE , SEQ_LEN, 4096});
-  batch_permute_a.assign({BATCH_SIZE, 4096, SEQ_LEN});
-  batch_pool0_a.assign({BATCH_SIZE, 1024});
-  batch_pool1_a.assign({BATCH_SIZE, 1024});
-  batch_pool2_a.assign({BATCH_SIZE, 1024});
-  batch_pool3_a.assign({BATCH_SIZE, 1024});
-  batch_concat_a.assign({BATCH_SIZE, 1024 * 4});
-  batch_linear0_a.assign({BATCH_SIZE, 2048});
-  batch_linear1_a.assign({BATCH_SIZE, 1024});
-  batch_linear2_a.assign({BATCH_SIZE, 512});
-  batch_linear3_a.assign({BATCH_SIZE, 2});
-
-  // malloc -> cudaMallocHost
-  batch_emb_a.buf = (float *)malloc(batch_emb_a.getNumParams() * sizeof(float));
-  batch_permute_a.buf = (float *)malloc(batch_permute_a.getNumParams() * sizeof(float));
-  batch_pool0_a.buf = (float *)malloc(batch_pool0_a.getNumParams() * sizeof(float));
-  batch_pool1_a.buf = (float *)malloc(batch_pool1_a.getNumParams() * sizeof(float));
-  batch_pool2_a.buf = (float *)malloc(batch_pool2_a.getNumParams() * sizeof(float));
-  batch_pool3_a.buf = (float *)malloc(batch_pool3_a.getNumParams() * sizeof(float));
-  batch_concat_a.buf = (float *)malloc(batch_concat_a.getNumParams() * sizeof(float));
-  batch_linear0_a.buf = (float *)malloc(batch_linear0_a.getNumParams()  * sizeof(float));
-  batch_linear1_a.buf = (float *)malloc(batch_linear1_a.getNumParams()  * sizeof(float));
-  batch_linear2_a.buf = (float *)malloc(batch_linear2_a.getNumParams()  * sizeof(float));
-  batch_linear3_a.buf = (float *)malloc(batch_linear3_a.getNumParams()  * sizeof(float));
 
   size_t num_batches = samples_per_node / BATCH_SIZE;
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
