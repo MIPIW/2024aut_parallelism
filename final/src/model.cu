@@ -3,7 +3,7 @@
 #include <mpi.h>
 
 #include <cstdio>
-
+#include <tensor.h>
 #include "layer.h"
 #include "model.h"
 
@@ -143,6 +143,8 @@ void free_activations() {
   delete linear3_a;
 }
 
+const size_t BATCH_SIZE = 16;
+
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int mpi_rank, mpi_size;
@@ -168,92 +170,99 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
               local_n_samples * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
   // Compute sentiment for the assigned subset
-  for (size_t n = 0; n < local_n_samples; n++) {
-    int *single_input = local_inputs + n * SEQ_LEN;
 
-  printf("%d", 235235);
-  // int mpi_rank;
-  // MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  // if (mpi_rank == 0) { 
-  //   /* Predict sentiment for each sentence */
-  //   for (size_t n = 0; n < n_samples; n++) {
-  //     /* Load a sentence from the inputs */
-  //     int *single_input = inputs + n * SEQ_LEN;      
 
-      /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
-      Embedding(single_input, emb_w, emb_a);
+  // Compute sentiment for the assigned subset in batches
+  for (size_t batch_start = 0; batch_start < local_n_samples; batch_start += BATCH_SIZE) {
+    size_t batch_end = fmin(batch_start + BATCH_SIZE, local_n_samples);
+    size_t current_batch_size = batch_end - batch_start;
 
-      /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
-      Permute(emb_a, permute_a);
+    // Allocate memory for batched inputs and outputs
+    int *batch_inputs = local_inputs + batch_start * SEQ_LEN;
+    Tensor batch_emb_a, batch_permute_a, batch_conv0_a, batch_pool0_a;
+    Tensor batch_conv1_a, batch_pool1_a, batch_conv2_a, batch_pool2_a;
+    Tensor batch_conv3_a, batch_pool3_a, batch_concat_a;
+    Tensor batch_linear0_a, batch_linear1_a, batch_linear2_a, batch_linear3_a;
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
-      Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
-      ReLU(conv0_a);
+    // Initialize shapes for intermediate tensors
+    batch_emb_a.shape[0] = current_batch_size * SEQ_LEN;
+    batch_emb_a.shape[1] = 4096;
+    batch_emb_a.buf = (float *)malloc(current_batch_size * SEQ_LEN * 4096 * sizeof(float));
 
-      /* in [1024, SEQ_LEN - 2] -> out [1024] */
-      GetMax(conv0_a, pool0_a);
+    batch_permute_a.shape[0] = current_batch_size * 4096;
+    batch_permute_a.shape[1] = SEQ_LEN;
+    batch_permute_a.buf = (float *)malloc(current_batch_size * 4096 * SEQ_LEN * sizeof(float));
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
-      Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
-      ReLU(conv1_a);
+    batch_pool0_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
+    batch_pool1_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
+    batch_pool2_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
+    batch_pool3_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
+    batch_concat_a.buf = (float *)malloc(current_batch_size * 1024 * 4 * sizeof(float));
+    batch_linear0_a.buf = (float *)malloc(current_batch_size * 2048 * sizeof(float));
+    batch_linear1_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
+    batch_linear2_a.buf = (float *)malloc(current_batch_size * 512 * sizeof(float));
+    batch_linear3_a.buf = (float *)malloc(current_batch_size * 2 * sizeof(float));
 
-      /* in [1024, SEQ_LEN - 4] -> out [1024] */
-      GetMax(conv1_a, pool1_a);
+    // Perform embedding for the batch
+    Embedding(batch_inputs, emb_w, &batch_emb_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
-      Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
-      ReLU(conv2_a);
+    // Permute
+    Permute(&batch_emb_a, &batch_permute_a);
 
-      /* in [1024, SEQ_LEN - 6] -> out [1024] */
-      GetMax(conv2_a, pool2_a);
+    // Apply convolutional and pooling operations
+    Conv1D(&batch_permute_a, conv0_w, conv0_b, &batch_conv0_a);
+    ReLU(&batch_conv0_a);
+    GetMax(&batch_conv0_a, &batch_pool0_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
-      Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
-      ReLU(conv3_a);
+    Conv1D(&batch_permute_a, conv1_w, conv1_b, &batch_conv1_a);
+    ReLU(&batch_conv1_a);
+    GetMax(&batch_conv1_a, &batch_pool1_a);
 
-      /* in [1024, SEQ_LEN - 8] -> out [1024] */
-      GetMax(conv3_a, pool3_a);
+    Conv1D(&batch_permute_a, conv2_w, conv2_b, &batch_conv2_a);
+    ReLU(&batch_conv2_a);
+    GetMax(&batch_conv2_a, &batch_pool2_a);
 
-      /* in [1024] +
-            [1024] +
-            [1024] +
-            [1024] -> out [1024 * 4] */
-      Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
+    Conv1D(&batch_permute_a, conv3_w, conv3_b, &batch_conv3_a);
+    ReLU(&batch_conv3_a);
+    GetMax(&batch_conv3_a, &batch_pool3_a);
 
-      /* in [1024 * 4] -> out [2048] */
-      Linear(concat_a, linear0_w, linear0_b, linear0_a);
-      ReLU(linear0_a);
+    // Concatenate pooled features
+    Concat(&batch_pool0_a, &batch_pool1_a, &batch_pool2_a, &batch_pool3_a, &batch_concat_a);
 
-      /* in [2048] -> out [1024] */
-      Linear(linear0_a, linear1_w, linear1_b, linear1_a);
-      ReLU(linear1_a);
+    // Fully connected layers
+    Linear(&batch_concat_a, linear0_w, linear0_b, &batch_linear0_a);
+    ReLU(&batch_linear0_a);
 
-      /* in [1024] -> out [512] */
-      Linear(linear1_a, linear2_w, linear2_b, linear2_a);
-      ReLU(linear2_a);
+    Linear(&batch_linear0_a, linear1_w, linear1_b, &batch_linear1_a);
+    ReLU(&batch_linear1_a);
 
-      /* in [512] -> out [2] */
-      Linear(linear2_a, linear3_w, linear3_b, linear3_a);
+    Linear(&batch_linear1_a, linear2_w, linear2_b, &batch_linear2_a);
+    ReLU(&batch_linear2_a);
 
-      /* The output 'linear3_a' (shape: [2]) contains the probabilities 
-        for each sentiment class (0: negative, 1: positive). To determine 
-        the sentiment, we can simply take the argmax of these probabilities. 
-      */
+    Linear(&batch_linear2_a, linear3_w, linear3_b, &batch_linear3_a);
 
-//       /* Copy the computation result to the outputs */
-//       memcpy(outputs + n * 2, linear3_a->buf, 2 * sizeof(float));
-//     }
-//   }
-// }
+    // Copy the computation result to the local outputs
+    memcpy(local_outputs + batch_start * 2, batch_linear3_a.buf, current_batch_size * 2 * sizeof(float));
 
-    memcpy(local_outputs + n * 2, linear3_a->buf, 2 * sizeof(float));
+    // Free intermediate memory for this batch
+    free(batch_emb_a.buf);
+    free(batch_permute_a.buf);
+    free(batch_pool0_a.buf);
+    free(batch_pool1_a.buf);
+    free(batch_pool2_a.buf);
+    free(batch_pool3_a.buf);
+    free(batch_concat_a.buf);
+    free(batch_linear0_a.buf);
+    free(batch_linear1_a.buf);
+    free(batch_linear2_a.buf);
+    free(batch_linear3_a.buf);
   }
 
   // Gather outputs from all nodes
   MPI_Gather(local_outputs, local_n_samples * 2, MPI_FLOAT, outputs,
-             samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
+            samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
   // Free local buffers
   cudaFreeHost(local_inputs);
   cudaFreeHost(local_outputs);
-}
+  }

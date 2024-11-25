@@ -24,6 +24,7 @@ struct Tensor {
   size_t shape[4];
   float *buf = nullptr;
 
+  Tensor() = default;
   Tensor(const vector<size_t> &shape_);
   Tensor(const vector<size_t> &shape_, float *buf_);
   ~Tensor();
