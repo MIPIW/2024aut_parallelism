@@ -171,6 +171,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   for (size_t n = 0; n < local_n_samples; n++) {
     int *single_input = local_inputs + n * SEQ_LEN;
 
+  printf("%d", 235235);
   // int mpi_rank;
   // MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   // if (mpi_rank == 0) { 
