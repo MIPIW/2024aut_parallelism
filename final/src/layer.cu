@@ -1,7 +1,58 @@
 ////변경가능
 
 #include "layer.h"
+// #define TILE_SIZE 16
+// #define C_SIZE 16
 
+// __global__ void matmul_kernel(float* A, float* B, float* C, int M, int N, int K) {
+//     // Compute work-item's global row and column
+//     const int locRow = threadIdx.y;
+//     const int locCol = threadIdx.x;
+
+//     const int glbRow = blockIdx.y * blockDim.y + threadIdx.y;
+//     const int glbCol = blockIdx.x * blockDim.x + threadIdx.x;
+    
+//     const int locBSRow = blockDim.y;
+//     const int glbWSRow = gridDim.y * blockDim.y;
+
+//     __shared__ float Asub[TILE_SIZE][TILE_SIZE];
+//     __shared__ float Bsub[TILE_SIZE][TILE_SIZE];
+
+//     float temp[C_SIZE];
+//     for (int j = 0; j < C_SIZE; ++j) {
+//         temp[j] = 0.0;
+//     }
+    
+//     const int NUM_TILES = (K + TILE_SIZE - 1) / TILE_SIZE;
+
+//     for (int t = 0; t < NUM_TILES; ++t) {
+//         for (int j = 0; j < C_SIZE; ++j) { // example이 항상 2의 제곱수이니까 패딩을 넣을 필요 없음. 
+//           Asub[locRow + j * locBSRow][locCol] = A[(glbRow + j * glbWSRow) * K + (TILE_SIZE * t + locCol)];
+//         }
+
+//         for (int k = 0; k < TILE_SIZE; ++k) {
+//           Bsub[k][locCol] = B[(TILE_SIZE * t + k) * N + glbCol];
+//         }
+        
+//         __syncthreads();
+
+//         for (int k = 0; k < TILE_SIZE; ++k) {
+//             for (int j = 0; j < C_SIZE; ++j) {
+//                 int locIdxRowA = locRow + j * locBSRow;
+//                 temp[j] += Asub[locIdxRowA][k] * Bsub[k][locCol];
+//             }
+//         }
+//         __syncthreads();
+//     }
+
+//     for (int j = 0; j < C_SIZE; ++j) {
+//         int glbIdxRow = glbRow + j * glbWSRow;
+
+//         if (glbIdxRow < M && glbCol < N) {
+//             C[glbIdxRow * N + glbCol] = temp[j];
+//         }
+//     }
+// }
 
 /* Embedding
  * @param [in1]  in: [s]

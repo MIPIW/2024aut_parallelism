@@ -1,11 +1,13 @@
 ////변경가능
 
 #include <mpi.h>
-
 #include <cstdio>
 #include <tensor.h>
 #include "layer.h"
 #include "model.h"
+#include <pthread.h>
+#include <cuda_runtime.h>
+#include <stdlib.h>
 
 
 /* [Model Parameters]
@@ -144,6 +146,17 @@ void free_activations() {
 }
 
 const size_t BATCH_SIZE = 16;
+const int NUM_GPUES_PER_NODE = 4;
+const int NUM_THREADS_PER_NODE = 4;
+const int NUM_NODES = 4;
+
+typedef struct {
+  int gpu_id;
+  float *A;
+  float *B;
+  float *C;
+  int M, N, K;
+} ThreadData;
 
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
@@ -152,7 +165,9 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
   // Calculate the number of samples per node
-  size_t samples_per_node = (n_samples + mpi_size - 1) / mpi_size; // Round up
+  size_t samples_per_node = n_samples / mpi_size;
+  printf("-------------------%d------------------", mpi_size);
+
   size_t start_idx = mpi_rank * samples_per_node;
   size_t end_idx = fmin(start_idx + samples_per_node, n_samples);
 
@@ -169,7 +184,37 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               local_n_samples * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
-  // Compute sentiment for the assigned subset
+
+  // initializing tensor in each node.
+  Tensor batch_emb_a, batch_permute_a, batch_conv0_a, batch_pool0_a;
+  Tensor batch_conv1_a, batch_pool1_a, batch_conv2_a, batch_pool2_a;
+  Tensor batch_conv3_a, batch_pool3_a, batch_concat_a;
+  Tensor batch_linear0_a, batch_linear1_a, batch_linear2_a, batch_linear3_a;
+
+  batch_emb_a.assign({BATCH_SIZE , SEQ_LEN, 4096});
+  batch_permute_a.assign({BATCH_SIZE, 4096, SEQ_LEN});
+  batch_pool0_a.assign({BATCH_SIZE, 1024});
+  batch_pool1_a.assign({BATCH_SIZE, 1024});
+  batch_pool2_a.assign({BATCH_SIZE, 1024});
+  batch_pool3_a.assign({BATCH_SIZE, 1024});
+  batch_concat_a.assign({BATCH_SIZE, 1024 * 4});
+  batch_linear0_a.assign({BATCH_SIZE, 2048});
+  batch_linear1_a.assign({BATCH_SIZE, 1024});
+  batch_linear2_a.assign({BATCH_SIZE, 512});
+  batch_linear3_a.assign({BATCH_SIZE, 2});
+
+  // Initialize shapes for intermediate tensors
+  batch_emb_a.buf = (float *)malloc(batch_emb_a.getNumParams() * sizeof(float));
+  batch_permute_a.buf = (float *)malloc(batch_permute_a.getNumParams() * sizeof(float));
+  batch_pool0_a.buf = (float *)malloc(batch_pool0_a.getNumParams() * sizeof(float));
+  batch_pool1_a.buf = (float *)malloc(batch_pool1_a.getNumParams() * sizeof(float));
+  batch_pool2_a.buf = (float *)malloc(batch_pool2_a.getNumParams() * sizeof(float));
+  batch_pool3_a.buf = (float *)malloc(batch_pool3_a.getNumParams() * sizeof(float));
+  batch_concat_a.buf = (float *)malloc(batch_concat_a.getNumParams() * sizeof(float));
+  batch_linear0_a.buf = (float *)malloc(batch_linear0_a.getNumParams()  * sizeof(float));
+  batch_linear1_a.buf = (float *)malloc(batch_linear1_a.getNumParams()  * sizeof(float));
+  batch_linear2_a.buf = (float *)malloc(batch_linear2_a.getNumParams()  * sizeof(float));
+  batch_linear3_a.buf = (float *)malloc(batch_linear3_a.getNumParams()  * sizeof(float));
 
 
   // Compute sentiment for the assigned subset in batches
@@ -177,31 +222,8 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
     size_t batch_end = fmin(batch_start + BATCH_SIZE, local_n_samples);
     size_t current_batch_size = batch_end - batch_start;
 
-    // Allocate memory for batched inputs and outputs
     int *batch_inputs = local_inputs + batch_start * SEQ_LEN;
-    Tensor batch_emb_a, batch_permute_a, batch_conv0_a, batch_pool0_a;
-    Tensor batch_conv1_a, batch_pool1_a, batch_conv2_a, batch_pool2_a;
-    Tensor batch_conv3_a, batch_pool3_a, batch_concat_a;
-    Tensor batch_linear0_a, batch_linear1_a, batch_linear2_a, batch_linear3_a;
-
-    // Initialize shapes for intermediate tensors
-    batch_emb_a.shape[0] = current_batch_size * SEQ_LEN;
-    batch_emb_a.shape[1] = 4096;
-    batch_emb_a.buf = (float *)malloc(current_batch_size * SEQ_LEN * 4096 * sizeof(float));
-
-    batch_permute_a.shape[0] = current_batch_size * 4096;
-    batch_permute_a.shape[1] = SEQ_LEN;
-    batch_permute_a.buf = (float *)malloc(current_batch_size * 4096 * SEQ_LEN * sizeof(float));
-
-    batch_pool0_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
-    batch_pool1_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
-    batch_pool2_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
-    batch_pool3_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
-    batch_concat_a.buf = (float *)malloc(current_batch_size * 1024 * 4 * sizeof(float));
-    batch_linear0_a.buf = (float *)malloc(current_batch_size * 2048 * sizeof(float));
-    batch_linear1_a.buf = (float *)malloc(current_batch_size * 1024 * sizeof(float));
-    batch_linear2_a.buf = (float *)malloc(current_batch_size * 512 * sizeof(float));
-    batch_linear3_a.buf = (float *)malloc(current_batch_size * 2 * sizeof(float));
+ 
 
     // Perform embedding for the batch
     Embedding(batch_inputs, emb_w, &batch_emb_a);
