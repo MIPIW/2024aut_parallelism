@@ -149,6 +149,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
+
   // Calculate the number of samples per node
   size_t samples_per_node = (n_samples + mpi_size - 1) / mpi_size; // Round up
   size_t start_idx = mpi_rank * samples_per_node;
