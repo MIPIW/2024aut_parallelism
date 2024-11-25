@@ -166,7 +166,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   // Scatter input data to all nodes
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               local_n_samples * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
-
+  
   // Compute sentiment for the assigned subset
   for (size_t n = 0; n < local_n_samples; n++) {
     int *single_input = local_inputs + n * SEQ_LEN;
