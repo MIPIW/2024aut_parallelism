@@ -146,8 +146,8 @@ void free_activations() {
   delete linear3_a;
 }
 
-const int NUM_GPUES_PER_NODE = 4;
-const int NUM_THREADS_PER_NODE = 4;
+// const int NUM_GPUES_PER_NODE = 4;
+// const int NUM_THREADS_PER_NODE = 4;
 
 typedef struct {
   int gpu_id;
@@ -164,13 +164,15 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
   // Calculate the number of samples per node
-  // samples must be # of power of 2
-  size_t samples_per_node = n_samples / mpi_size;
+  
+  // 총 16개, 노드당 4개, 배치당 2개, 총 2 배치
+  size_t samples_per_node = n_samples / mpi_size; 
   // size_t start_idx = mpi_rank * samples_per_node;
   // size_t end_idx = (mpi_rank + 1) * samples_per_node;
+
   // Allocate local buffers for input and output using cudaMallocHost
-  int *local_inputs = nullptr;
-  float *local_outputs = nullptr;
+  int *local_inputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));
+  int *local_outputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));  
 
   // Use cudaMallocHost for pinned memory
   //여기가 아닌것같은데 
@@ -181,21 +183,12 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
-
-  // initializing tensor in each node.
-  Tensor batch_emb_a, batch_permute_a, batch_conv0_a, batch_pool0_a;
-  Tensor batch_conv1_a, batch_pool1_a, batch_conv2_a, batch_pool2_a;
-  Tensor batch_conv3_a, batch_pool3_a, batch_concat_a;
-  Tensor batch_linear0_a, batch_linear1_a, batch_linear2_a, batch_linear3_a;
-
   size_t num_batches = samples_per_node / BATCH_SIZE;
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
     int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
-
       /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
       Embedding(batchInput, emb_w, emb_a);
-
-      printf("-------------%d--------------", 3);
+      
       /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
       Permute(emb_a, permute_a);
 
@@ -249,14 +242,16 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       Linear(linear2_a, linear3_w, linear3_b, linear3_a);
 
 
-    memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, batch_linear3_a.buf, BATCH_SIZE * 2 * sizeof(float));
+    memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
   }
 
-  // Gather outputs from all nodes
+  // // Gather outputs from all nodes
   MPI_Gather(local_outputs, samples_per_node * 2, MPI_FLOAT, outputs,
             samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-  // Free local buffers
-  // cudaFreeHost(local_inputs);
-  // cudaFreeHost(local_outputs);
-  }
+  // // Free local buffers
+  // // cudaFreeHost(local_inputs);
+  // // cudaFreeHost(local_outputs);
+  free(local_inputs);
+  free(local_outputs);
+}
