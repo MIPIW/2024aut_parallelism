@@ -171,23 +171,34 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   // size_t end_idx = (mpi_rank + 1) * samples_per_node;
 
   // Allocate local buffers for input and output using cudaMallocHost
-  int *local_inputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));
-  int *local_outputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));  
 
   // Use cudaMallocHost for pinned memory
   //여기가 아닌것같은데 
-  // cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
-  // cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
+  int * local_inputs = nullptr;
+  int * local_outputs = nullptr;
+  cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
+  cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
+
+  int * gpu_mem_inputs = nullptr;
+  int * gpu_mem_outputs = nullptr;
+  cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
+  cudaMalloc(&gpu_mem_outputs, BATCH_SIZE * N_CLASSES * sizeof(float));
+  cudaMalloc(&emb_a->buf, BATCH_SIZE * SEQ_LEN * 4096 * sizeof(float));
 
   // Scatter input data to all nodes
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
+
   size_t num_batches = samples_per_node / BATCH_SIZE;
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
     int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
       /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
+      cudaMemcpy(gpu_mem_inputs, local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN,
+      BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
+
       Embedding(batchInput, emb_w, emb_a);
+      printf("-------%d-----asfd----", 2);
       
       /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
       Permute(emb_a, permute_a);

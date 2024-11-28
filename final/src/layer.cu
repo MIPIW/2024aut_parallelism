@@ -72,6 +72,7 @@ void Embedding(int *in, Tensor* w, Tensor *out) {
     for (size_t i = 0; i < S; ++i) { // Iterate over sequence length
       int vocab_idx = in[k * S + i]; // Input index for the current batch and sequence position
       for (size_t j = 0; j < H; ++j) { // Iterate over hidden dimensions
+      printf("asdfasdf");
         out->buf[k * (S * H) + i * H + j] = w->buf[vocab_idx * H + j];
       }
 
