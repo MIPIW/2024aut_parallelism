@@ -226,19 +226,22 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       cudaMemcpy(gpu_mem_inputs, batchInput,
       BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
 
+      cudaMemcpy(batchInput, gpu_mem_inputs,
+        BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyDeviceToHost);
 
-      int blockDim = SEQ_LEN; // sequence length
-      int gridDim = BATCH_SIZE;
-      EmbeddingKernel<<<gridDim, blockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
-    //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
-      cudaDeviceSynchronize();
+    //   int blockDim = SEQ_LEN; // sequence length
+    //   int gridDim = BATCH_SIZE;
+    //   EmbeddingKernel<<<gridDim, blockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+    // //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
+    //   cudaDeviceSynchronize();
 
-      cudaMemcpy(emb_a->buf, emb_ag,
-        permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+    //   cudaMemcpy(emb_a->buf, emb_ag,
+    //     permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
 
-      Permute(
-      PermuteKernel<<<gridDim, blockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
-      cudaDeviceSynchronize();
+      Permute(emb_a, permute_a);
+      
+      // PermuteKernel<<<gridDim, blockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+      // cudaDeviceSynchronize();
 
       // cudaMemcpy(permute_a->buf, permute_ag,
       //   permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
@@ -296,10 +299,9 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       /* in [512] -> out [2] */
       Linear(linear2_a, linear3_w, linear3_b, linear3_a);
 
-
-    // memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
-    cudaMemcpy(local_outputs + cur_batch * BATCH_SIZE * 2, gpu_mem_outputs,
-               BATCH_SIZE * N_CLASSES * sizeof(float), cudaMemcpyDeviceToHost);
+      memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
+    // cudaMemcpy(local_outputs + cur_batch * BATCH_SIZE * 2, gpu_mem_outputs,
+    //            BATCH_SIZE * N_CLASSES * sizeof(float), cudaMemcpyDeviceToHost);
   
   }
 
