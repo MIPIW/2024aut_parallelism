@@ -79,16 +79,25 @@ void Embedding(int *in, Tensor* w, Tensor *out) {
   }
 }
 
-__global__ void EmbeddingKernel(int *in, float * w, float *out, size_t B, size_t S, size_t H) {
+__global__ void EmbeddingKernel(int *in, float *w, float *out, size_t B, size_t S, size_t H) {
+  // Calculate the global thread index
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= B * S) return; // Ensure the thread index is within bounds
 
-  size_t idx = blockIdx.x * blockDim.x + threadIdx.x; // Global thread index
-  if (idx >= B * S) return;
-  
-  int vocab_idx = in[idx];
-  if (vocab_idx < 0 || vocab_idx >= 21635) return; // 21635: vocab size
+  // Calculate the batch and sequence indices
+  size_t batch_idx = idx / S;  // Batch index
+  size_t seq_idx = idx % S;    // Sequence index
 
+  // Retrieve the vocabulary index for this input
+  int vocab_idx = in[batch_idx * S + seq_idx];
+  if (vocab_idx < 0 || vocab_idx >= 21635) return; // Check bounds for vocabulary size
+
+  // Compute the offset in the output buffer
+  size_t out_offset = batch_idx * (S * H) + seq_idx * H;
+
+  // Populate the embedding for the given sequence position
   for (size_t j = 0; j < H; ++j) {
-      out[idx * H] = w[vocab_idx * H + j];
+    out[out_offset + j] = w[vocab_idx * H + j];
   }
 }
 
@@ -120,20 +129,23 @@ __global__ void PermuteKernel(float *in, float *out, size_t b, size_t s, size_t 
   // Calculate the global thread index
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  size_t elements_per_batch = s * H;
+  // Total number of elements across all batches
+  size_t total_elements = b * s * H;
 
-  if (idx >= b * elements_per_batch) return;
+  // Return if the thread index exceeds the total number of elements
+  if (idx >= total_elements) return;
 
-  size_t batch_idx = idx / elements_per_batch; // Batch index
-  size_t local_idx = idx % elements_per_batch; // Local position within the batch
+  // Calculate the batch index, sequence index, and hidden dimension index
+  size_t batch_idx = idx / (s * H);         // Batch index
+  size_t seq_hidden_idx = idx % (s * H);    // Position within the sequence and hidden dims
+  size_t seq_idx = seq_hidden_idx / H;      // Sequence index
+  size_t hidden_idx = seq_hidden_idx % H;   // Hidden dimension index
 
-  size_t i = local_idx / H; // Sequence index
-  size_t j = local_idx % H; // Hidden dimension index
-
-  // Perform the permutation (swap dimensions s and h)
-  out[batch_idx * elements_per_batch + j * s + i] = 
-      in[batch_idx * elements_per_batch + i * H + j];
+  // Perform the permutation (swap dimensions S and H)
+  out[batch_idx * (s * H) + hidden_idx * s + seq_idx] = 
+      in[batch_idx * (s * H) + seq_idx * H + hidden_idx];
 }
+
 
 /* Conv1D 
  * @param [in1]  in: [C, s]
@@ -191,41 +203,37 @@ void Conv1D(Tensor *in, Tensor *w, Tensor *bias, Tensor *out) {
   }
 }
 
-
-__global__ void Conv1DKernel(float *in, float *w, float *bias, float *out,
-                             size_t B, size_t C, size_t s, size_t OC, size_t K) {
-  // Calculate the global thread index
-  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
+__global__ void Conv1DKernel(
+    float *in, float *w, float *bias, float *out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) {
   // Output sequence length
   size_t os = s - K + 1;
 
-  // Total elements in the output tensor
-  size_t elements_per_batch = OC * os;
+  // Thread index: represents the position in the sequence
+  int j = threadIdx.x; // Sequence position
 
-  // Ensure the thread index is within bounds
-  if (idx >= B * elements_per_batch) return;
+  // Block index: represents the batch
+  int b = blockIdx.x; // Batch index
 
-  // Calculate the batch index and the local position within the batch
-  size_t batch_idx = idx / elements_per_batch;  // Batch index
-  size_t local_idx = idx % elements_per_batch;  // Local position within the batch
+  // Ensure within bounds
+  if (j >= os) return;
 
-  // Calculate the output channel and sequence position
-  size_t oc = local_idx / os;  // Output channel index
-  size_t j = local_idx % os;   // Output sequence index
+  // Iterate over output channels
+  for (size_t oc = 0; oc < OC; ++oc) {
+    float val = 0.f;
 
-  // Compute the convolution
-  float val = 0.f;
-  for (size_t c = 0; c < C; ++c) { // Iterate over input channels
-    for (size_t k = 0; k < K; ++k) { // Iterate over kernel size
-      val += in[batch_idx * (C * s) + c * s + j + k] *
-             w[oc * (C * K) + c * K + k];
+    // Compute the convolution for the current output channel and sequence position
+    for (size_t c = 0; c < C; ++c) {
+      for (size_t k = 0; k < K; ++k) {
+        val += in[b * (C * s) + c * s + j + k] * w[oc * (C * K) + c * K + k];
+      }
     }
-  }
 
-  // Add bias and write the result to the output tensor
-  out[batch_idx * elements_per_batch + oc * os + j] = val + bias[oc];
+    // Add bias and write the result to the output tensor
+    out[b * (OC * os) + oc * os + j] = val + bias[oc];
+  }
 }
+
 
 
 /* ReLU
@@ -255,6 +263,9 @@ __global__ void ReLU_Kernel(float *inout, size_t N) {
     inout[i] = inout[i] > 0 ? inout[i] : 0;
   }
 }
+
+
+
 /* ReLU using CUDA */
 void ReLU_CUDA(Tensor *inout) {
   size_t N = inout->num_elem();
@@ -302,6 +313,37 @@ void GetMax(Tensor *in, Tensor *out) {
     }
   }
 }
+
+__global__ void GetMaxKernel(float *in, float *out, size_t B, size_t C, size_t S) {
+  // Calculate the global thread index
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Total number of channels across all batches
+  size_t total_channels = B * C;
+
+  // Ensure the thread index is within bounds
+  if (idx >= total_channels) return;
+
+  // Calculate the batch index and channel index
+  size_t batch_idx = idx / C; // Batch index
+  size_t channel_idx = idx % C; // Channel index
+
+  // Initialize the max value for the current channel in the current batch
+  size_t base_idx = batch_idx * (C * S) + channel_idx * S;
+  float max_val = in[base_idx];
+
+  // Iterate over the sequence dimension to find the maximum value
+  for (size_t j = 1; j < S; ++j) {
+    float current_val = in[base_idx + j];
+    if (current_val > max_val) {
+      max_val = current_val;
+    }
+  }
+
+  // Store the maximum value in the output tensor
+  out[batch_idx * C + channel_idx] = max_val;
+}
+
 
 /* Concat
  * @param [in1] in1: [B, N1]

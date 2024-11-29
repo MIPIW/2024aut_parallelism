@@ -21,4 +21,5 @@ __global__ void EmbeddingKernel(int *in, float *w, float *out, size_t B, size_t 
 __global__ void PermuteKernel(float *in, float *out, size_t b, size_t s, size_t h);
 __global__ void Conv1DKernel(float *in, float *w, float *bias, float *out,
                              size_t B, size_t C, size_t s, size_t OC, size_t K);
-__global__ void ReLU_Kernel(float *inout, size_t N);
+__global__ void ReLU_Kernel(float *in, size_t num_elem);
+__global__ void GetMaxKernel(float *in, float *out, size_t B, size_t C, size_t S);

@@ -183,6 +183,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       exit(EXIT_FAILURE);
   }
 
+  // non-weight
   int * gpu_mem_inputs = nullptr;
   float * gpu_mem_outputs = nullptr;
   cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
@@ -192,11 +193,15 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   cudaMalloc(&emb_ag, emb_a->num_elem() * sizeof(float));
   cudaMalloc(&permute_ag, permute_a->num_elem() * sizeof(float));
 
+  float *pool0_ag;
+  cudaMalloc(&pool0_ag, pool0_a->num_elem() * sizeof(float));
+
   // // tensor buf 다 nullptr로 초기화하는 걸로 바꾸기
   // cudaMalloc(&emb_a->buf, emb_a->num_elem() * sizeof(float));
   // cudaMalloc(&permute_a->buf, permute_a->num_elem() * sizeof(float));
 
 
+  // weight
   float * emb_wg = nullptr;
   cudaMalloc(&emb_wg, emb_w->num_elem() * sizeof(float));
   cudaMemcpy(emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
@@ -226,17 +231,23 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       cudaMemcpy(gpu_mem_inputs, batchInput,
       BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
 
-      cudaMemcpy(batchInput, gpu_mem_inputs,
-        BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyDeviceToHost);
+      // cudaMemcpy(batchInput, gpu_mem_inputs,
+      //   BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyDeviceToHost);
 
-    //   int blockDim = SEQ_LEN; // sequence length
-    //   int gridDim = BATCH_SIZE;
-    //   EmbeddingKernel<<<gridDim, blockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
-    // //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
-    //   cudaDeviceSynchronize();
+      // Embedding(batchInput, emb_w, emb_a);
 
-    //   cudaMemcpy(emb_a->buf, emb_ag,
-    //     permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+      int blockDim = SEQ_LEN; // sequence length
+      int gridDim = BATCH_SIZE;
+      EmbeddingKernel<<<gridDim, blockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+    //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
+      // cudaDeviceSynchronize();
+
+      cudaDeviceSynchronize();
+
+      cudaMemcpy(emb_a->buf, emb_ag,
+        emb_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+
+      cudaDeviceSynchronize();
 
       Permute(emb_a, permute_a);
       
@@ -247,14 +258,35 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       //   permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
       
     // //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
-    //   Conv1DKernel<<<gridDim, blockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
-    //   ReLU_Kernel<<<gridDim, blockDim>>>(conv0_ag, conv0_a->num_elem());
-    //   cudaDeviceSynchronize();
-      
-      Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
-      ReLU(conv0_a);
+      cudaMemcpy(permute_ag, permute_a->buf,
+        permute_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
+      cudaDeviceSynchronize();
 
-      /* in [1024, SEQ_LEN - 2] -> out [1024] */
+      Conv1DKernel<<<gridDim, blockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
+      cudaDeviceSynchronize();
+
+      // cudaMemcpy(conv0_a->buf, conv0_ag,
+      //   conv0_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+      // cudaDeviceSynchronize();
+
+      ReLU_Kernel<<<gridDim, blockDim>>>(conv0_ag, conv0_a->num_elem());
+      cudaDeviceSynchronize();
+      
+      cudaMemcpy(conv0_a->buf, conv0_ag,
+        conv0_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+      cudaDeviceSynchronize();
+
+      // GetMaxKernel<<<gridDim, blockDim>>>(conv0_ag, pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN);
+      // cudaDeviceSynchronize();
+
+      // cudaMemcpy(pool0_a->buf, pool0_ag,
+      //   pool0_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+      // cudaDeviceSynchronize();
+      
+      // Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
+      // ReLU(conv0_a);
+
+      // /* in [1024, SEQ_LEN - 2] -> out [1024] */
       GetMax(conv0_a, pool0_a);
 
       /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
