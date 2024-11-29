@@ -72,11 +72,25 @@ void Embedding(int *in, Tensor* w, Tensor *out) {
     for (size_t i = 0; i < S; ++i) { // Iterate over sequence length
       int vocab_idx = in[k * S + i]; // Input index for the current batch and sequence position
       for (size_t j = 0; j < H; ++j) { // Iterate over hidden dimensions
-      printf("asdfasdf");
         out->buf[k * (S * H) + i * H + j] = w->buf[vocab_idx * H + j];
       }
 
     }
+  }
+}
+
+__global__ void EmbeddingKernel(int *in, Tensor* w, Tensor *out, size_t B, size_t S, size_t H) {
+
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x; // Global thread index
+  if (idx >= B * S) return;
+  
+  int vocab_idx = in[idx];
+  if (vocab_idx < 0 || vocab_idx >= w->shape[0]) return;
+
+  size_t k = idx / S; // Batch index
+  size_t i = idx % S; // Sequence index
+  for (size_t j = 0; j < H; ++j) {
+      out->buf[k * (S * H) + i * H + j] = w->buf[vocab_idx * H + j];
   }
 }
 

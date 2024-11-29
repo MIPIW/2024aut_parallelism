@@ -16,3 +16,5 @@ void Linear(Tensor *in, Tensor *w, Tensor *b, Tensor *out);
 
 /* Example of using CUDA kernel */
 void ReLU_CUDA(Tensor *inout);
+
+__global__ void EmbeddingKernel(int *in, Tensor *w, Tensor *out, size_t B, size_t S, size_t H);

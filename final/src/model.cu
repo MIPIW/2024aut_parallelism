@@ -163,14 +163,8 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-  // Calculate the number of samples per node
-  
   // 총 16개, 노드당 4개, 배치당 2개, 총 2 배치
   size_t samples_per_node = n_samples / mpi_size; 
-  // size_t start_idx = mpi_rank * samples_per_node;
-  // size_t end_idx = (mpi_rank + 1) * samples_per_node;
-
-  // Allocate local buffers for input and output using cudaMallocHost
 
   // Use cudaMallocHost for pinned memory
   //여기가 아닌것같은데 
@@ -194,66 +188,68 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
     int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
       /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
-      cudaMemcpy(gpu_mem_inputs, local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN,
+      cudaMemcpy(gpu_mem_inputs, batchInput,
       BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
 
-      Embedding(batchInput, emb_w, emb_a);
+      // EmbeddingKernel<<<1, 8>>>(batchInput, emb_w, emb_a, BATCH_SIZE, SEQ_LEN, 4096);
       printf("-------%d-----asfd----", 2);
       
-      /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
-      Permute(emb_a, permute_a);
+    //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
+    //   Permute(emb_a, permute_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
-      Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
-      ReLU(conv0_a);
+    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
+    //   Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
+    //   ReLU(conv0_a);
 
-      /* in [1024, SEQ_LEN - 2] -> out [1024] */
-      GetMax(conv0_a, pool0_a);
+    //   /* in [1024, SEQ_LEN - 2] -> out [1024] */
+    //   GetMax(conv0_a, pool0_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
-      Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
-      ReLU(conv1_a);
+    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
+    //   Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
+    //   ReLU(conv1_a);
 
-      /* in [1024, SEQ_LEN - 4] -> out [1024] */
-      GetMax(conv1_a, pool1_a);
+    //   /* in [1024, SEQ_LEN - 4] -> out [1024] */
+    //   GetMax(conv1_a, pool1_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
-      Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
-      ReLU(conv2_a);
+    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
+    //   Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
+    //   ReLU(conv2_a);
 
-      /* in [1024, SEQ_LEN - 6] -> out [1024] */
-      GetMax(conv2_a, pool2_a);
+    //   /* in [1024, SEQ_LEN - 6] -> out [1024] */
+    //   GetMax(conv2_a, pool2_a);
 
-      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
-      Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
-      ReLU(conv3_a);
+    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
+    //   Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
+    //   ReLU(conv3_a);
 
-      /* in [1024, SEQ_LEN - 8] -> out [1024] */
-      GetMax(conv3_a, pool3_a);
+    //   /* in [1024, SEQ_LEN - 8] -> out [1024] */
+    //   GetMax(conv3_a, pool3_a);
 
-      /* in [1024] +
-            [1024] +
-            [1024] +
-            [1024] -> out [1024 * 4] */
-      Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
+    //   /* in [1024] +
+    //         [1024] +
+    //         [1024] +
+    //         [1024] -> out [1024 * 4] */
+    //   Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
 
-      /* in [1024 * 4] -> out [2048] */
-      Linear(concat_a, linear0_w, linear0_b, linear0_a);
-      ReLU(linear0_a);
+    //   /* in [1024 * 4] -> out [2048] */
+    //   Linear(concat_a, linear0_w, linear0_b, linear0_a);
+    //   ReLU(linear0_a);
 
-      /* in [2048] -> out [1024] */
-      Linear(linear0_a, linear1_w, linear1_b, linear1_a);
-      ReLU(linear1_a);
+    //   /* in [2048] -> out [1024] */
+    //   Linear(linear0_a, linear1_w, linear1_b, linear1_a);
+    //   ReLU(linear1_a);
 
-      /* in [1024] -> out [512] */
-      Linear(linear1_a, linear2_w, linear2_b, linear2_a);
-      ReLU(linear2_a);
+    //   /* in [1024] -> out [512] */
+    //   Linear(linear1_a, linear2_w, linear2_b, linear2_a);
+    //   ReLU(linear2_a);
 
-      /* in [512] -> out [2] */
-      Linear(linear2_a, linear3_w, linear3_b, linear3_a);
+    //   /* in [512] -> out [2] */
+    //   Linear(linear2_a, linear3_w, linear3_b, linear3_a);
 
 
-    memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
+    // memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
+    cudaMemcpy(local_outputs + cur_batch * BATCH_SIZE * 2, gpu_mem_outputs,
+               BATCH_SIZE * N_CLASSES * sizeof(float), cudaMemcpyDeviceToHost);
   }
 
   // // Gather outputs from all nodes
@@ -261,8 +257,10 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
             samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
   // // Free local buffers
-  // // cudaFreeHost(local_inputs);
-  // // cudaFreeHost(local_outputs);
+
+  cudaFree(gpu_mem_outputs);
+  cudaFree(gpu_mem_inputs);
+  cudaFree(emb_a->buf);
   free(local_inputs);
   free(local_outputs);
 }
