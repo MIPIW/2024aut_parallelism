@@ -79,18 +79,16 @@ void Embedding(int *in, Tensor* w, Tensor *out) {
   }
 }
 
-__global__ void EmbeddingKernel(int *in, Tensor* w, Tensor *out, size_t B, size_t S, size_t H) {
+__global__ void EmbeddingKernel(int *in, float * w, float *out, size_t B, size_t S, size_t H) {
 
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x; // Global thread index
   if (idx >= B * S) return;
   
   int vocab_idx = in[idx];
-  if (vocab_idx < 0 || vocab_idx >= w->shape[0]) return;
+  if (vocab_idx < 0 || vocab_idx >= 21635) return; // 21635: vocab size
 
-  size_t k = idx / S; // Batch index
-  size_t i = idx % S; // Sequence index
   for (size_t j = 0; j < H; ++j) {
-      out->buf[k * (S * H) + i * H + j] = w->buf[vocab_idx * H + j];
+      out[idx * H] = w[vocab_idx * H + j];
   }
 }
 
@@ -112,6 +110,29 @@ void Permute(Tensor *in, Tensor *out) {
       }
     }
   }
+}
+
+/* Permute
+ * @param [in]   in: [B, S, H]
+ * @param [out] out: [B, H, S]
+ */
+__global__ void PermuteKernel(float *in, float *out, size_t b, size_t s, size_t H) {
+  // Calculate the global thread index
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  size_t elements_per_batch = s * H;
+
+  if (idx >= b * elements_per_batch) return;
+
+  size_t batch_idx = idx / elements_per_batch; // Batch index
+  size_t local_idx = idx % elements_per_batch; // Local position within the batch
+
+  size_t i = local_idx / H; // Sequence index
+  size_t j = local_idx % H; // Hidden dimension index
+
+  // Perform the permutation (swap dimensions s and h)
+  out[batch_idx * elements_per_batch + j * s + i] = 
+      in[batch_idx * elements_per_batch + i * H + j];
 }
 
 /* Conv1D 
@@ -168,6 +189,42 @@ void Conv1D(Tensor *in, Tensor *w, Tensor *bias, Tensor *out) {
       }
     }
   }
+}
+
+
+__global__ void Conv1DKernel(float *in, float *w, float *bias, float *out,
+                             size_t B, size_t C, size_t s, size_t OC, size_t K) {
+  // Calculate the global thread index
+  size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+  // Output sequence length
+  size_t os = s - K + 1;
+
+  // Total elements in the output tensor
+  size_t elements_per_batch = OC * os;
+
+  // Ensure the thread index is within bounds
+  if (idx >= B * elements_per_batch) return;
+
+  // Calculate the batch index and the local position within the batch
+  size_t batch_idx = idx / elements_per_batch;  // Batch index
+  size_t local_idx = idx % elements_per_batch;  // Local position within the batch
+
+  // Calculate the output channel and sequence position
+  size_t oc = local_idx / os;  // Output channel index
+  size_t j = local_idx % os;   // Output sequence index
+
+  // Compute the convolution
+  float val = 0.f;
+  for (size_t c = 0; c < C; ++c) { // Iterate over input channels
+    for (size_t k = 0; k < K; ++k) { // Iterate over kernel size
+      val += in[batch_idx * (C * s) + c * s + j + k] *
+             w[oc * (C * K) + c * K + k];
+    }
+  }
+
+  // Add bias and write the result to the output tensor
+  out[batch_idx * elements_per_batch + oc * os + j] = val + bias[oc];
 }
 
 

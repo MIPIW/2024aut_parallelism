@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #define BATCH_SIZE 2
+#define HIDDEN_DIM 4096
+#define INPUT_CHANNEL HIDDEN_DIM
+#define OUTPUT_CHANNEL 1024
 
 /* [Model Parameters]
  * _w: Weight parameter
@@ -129,8 +132,8 @@ void alloc_activations() {
 }
 
 void free_activations() {
-  delete emb_a;
-  delete permute_a;
+  // delete emb_a;
+  // delete permute_a;
   delete conv0_a;
   delete pool0_a;
   delete conv1_a;
@@ -168,21 +171,53 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
   // Use cudaMallocHost for pinned memory
   //여기가 아닌것같은데 
-  int * local_inputs = nullptr;
-  int * local_outputs = nullptr;
-  cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
-  cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
+  // int * local_inputs = nullptr;
+  // int * local_outputs = nullptr;
+  // cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
+  // cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
+
+  int *local_inputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));
+  float *local_outputs = (float *)malloc(samples_per_node * SEQ_LEN * sizeof(float));  
+  if (!local_outputs) {
+      fprintf(stderr, "Failed to allocate memory for local_outputs\n");
+      exit(EXIT_FAILURE);
+  }
 
   int * gpu_mem_inputs = nullptr;
-  int * gpu_mem_outputs = nullptr;
+  float * gpu_mem_outputs = nullptr;
   cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
   cudaMalloc(&gpu_mem_outputs, BATCH_SIZE * N_CLASSES * sizeof(float));
-  cudaMalloc(&emb_a->buf, BATCH_SIZE * SEQ_LEN * 4096 * sizeof(float));
+
+  float *emb_ag, *permute_ag;
+  cudaMalloc(&emb_ag, emb_a->num_elem() * sizeof(float));
+  cudaMalloc(&permute_ag, permute_a->num_elem() * sizeof(float));
+
+  // // tensor buf 다 nullptr로 초기화하는 걸로 바꾸기
+  // cudaMalloc(&emb_a->buf, emb_a->num_elem() * sizeof(float));
+  // cudaMalloc(&permute_a->buf, permute_a->num_elem() * sizeof(float));
+
+
+  float * emb_wg = nullptr;
+  cudaMalloc(&emb_wg, emb_w->num_elem() * sizeof(float));
+  cudaMemcpy(emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
+  
+  float *conv0_wg, *conv0_bg, *conv0_ag = nullptr;
+  cudaMalloc(&conv0_wg, conv0_w->num_elem() * sizeof(float));
+  cudaMalloc(&conv0_bg, conv0_b->num_elem() * sizeof(float));
+  cudaMalloc(&conv0_ag, conv0_a->num_elem() * sizeof(float));
+  cudaMemcpy(conv0_wg, conv0_w->buf, conv0_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(conv0_bg, conv0_b->buf, conv0_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(conv0_ag, conv0_a->buf, conv0_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
+
 
   // Scatter input data to all nodes
-  MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
+  int mpi_status = MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
+  if (mpi_status != MPI_SUCCESS) {
+    fprintf(stderr, "MPI_Scatter failed\n");
+    exit(EXIT_FAILURE);
+  }
 
   size_t num_batches = samples_per_node / BATCH_SIZE;
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
@@ -191,76 +226,95 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       cudaMemcpy(gpu_mem_inputs, batchInput,
       BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
 
-      // EmbeddingKernel<<<1, 8>>>(batchInput, emb_w, emb_a, BATCH_SIZE, SEQ_LEN, 4096);
-      printf("-------%d-----asfd----", 2);
-      
+
+      int blockDim = SEQ_LEN; // sequence length
+      int gridDim = BATCH_SIZE;
+      EmbeddingKernel<<<gridDim, blockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
     //   /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
-    //   Permute(emb_a, permute_a);
+      cudaDeviceSynchronize();
 
-    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
-    //   Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
-    //   ReLU(conv0_a);
+      cudaMemcpy(emb_a->buf, emb_ag,
+        permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
 
-    //   /* in [1024, SEQ_LEN - 2] -> out [1024] */
-    //   GetMax(conv0_a, pool0_a);
+      Permute(
+      PermuteKernel<<<gridDim, blockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+      cudaDeviceSynchronize();
 
-    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
-    //   Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
-    //   ReLU(conv1_a);
+      // cudaMemcpy(permute_a->buf, permute_ag,
+      //   permute_a->num_elem() * sizeof(float), cudaMemcpyDeviceToHost);
+      
+    // //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 2] */
+    //   Conv1DKernel<<<gridDim, blockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
+    //   ReLU_Kernel<<<gridDim, blockDim>>>(conv0_ag, conv0_a->num_elem());
+    //   cudaDeviceSynchronize();
+      
+      Conv1D(permute_a, conv0_w, conv0_b, conv0_a);
+      ReLU(conv0_a);
 
-    //   /* in [1024, SEQ_LEN - 4] -> out [1024] */
-    //   GetMax(conv1_a, pool1_a);
+      /* in [1024, SEQ_LEN - 2] -> out [1024] */
+      GetMax(conv0_a, pool0_a);
 
-    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
-    //   Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
-    //   ReLU(conv2_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 4] */
+      Conv1D(permute_a, conv1_w, conv1_b, conv1_a);
+      ReLU(conv1_a);
 
-    //   /* in [1024, SEQ_LEN - 6] -> out [1024] */
-    //   GetMax(conv2_a, pool2_a);
+      /* in [1024, SEQ_LEN - 4] -> out [1024] */
+      GetMax(conv1_a, pool1_a);
 
-    //   /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
-    //   Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
-    //   ReLU(conv3_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 6] */
+      Conv1D(permute_a, conv2_w, conv2_b, conv2_a);
+      ReLU(conv2_a);
 
-    //   /* in [1024, SEQ_LEN - 8] -> out [1024] */
-    //   GetMax(conv3_a, pool3_a);
+      /* in [1024, SEQ_LEN - 6] -> out [1024] */
+      GetMax(conv2_a, pool2_a);
 
-    //   /* in [1024] +
-    //         [1024] +
-    //         [1024] +
-    //         [1024] -> out [1024 * 4] */
-    //   Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
+      /* in [4096, SEQ_LEN] -> out [1024, SEQ_LEN - 8] */
+      Conv1D(permute_a, conv3_w, conv3_b, conv3_a);
+      ReLU(conv3_a);
 
-    //   /* in [1024 * 4] -> out [2048] */
-    //   Linear(concat_a, linear0_w, linear0_b, linear0_a);
-    //   ReLU(linear0_a);
+      /* in [1024, SEQ_LEN - 8] -> out [1024] */
+      GetMax(conv3_a, pool3_a);
 
-    //   /* in [2048] -> out [1024] */
-    //   Linear(linear0_a, linear1_w, linear1_b, linear1_a);
-    //   ReLU(linear1_a);
+      /* in [1024] +
+            [1024] +
+            [1024] +
+            [1024] -> out [1024 * 4] */
+      Concat(pool0_a, pool1_a, pool2_a, pool3_a, concat_a);
 
-    //   /* in [1024] -> out [512] */
-    //   Linear(linear1_a, linear2_w, linear2_b, linear2_a);
-    //   ReLU(linear2_a);
+      /* in [1024 * 4] -> out [2048] */
+      Linear(concat_a, linear0_w, linear0_b, linear0_a);
+      ReLU(linear0_a);
 
-    //   /* in [512] -> out [2] */
-    //   Linear(linear2_a, linear3_w, linear3_b, linear3_a);
+      /* in [2048] -> out [1024] */
+      Linear(linear0_a, linear1_w, linear1_b, linear1_a);
+      ReLU(linear1_a);
+
+      /* in [1024] -> out [512] */
+      Linear(linear1_a, linear2_w, linear2_b, linear2_a);
+      ReLU(linear2_a);
+
+      /* in [512] -> out [2] */
+      Linear(linear2_a, linear3_w, linear3_b, linear3_a);
 
 
     // memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
     cudaMemcpy(local_outputs + cur_batch * BATCH_SIZE * 2, gpu_mem_outputs,
                BATCH_SIZE * N_CLASSES * sizeof(float), cudaMemcpyDeviceToHost);
+  
   }
 
   // // Gather outputs from all nodes
-  MPI_Gather(local_outputs, samples_per_node * 2, MPI_FLOAT, outputs,
-            samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
+  MPI_Gather(local_outputs, samples_per_node * N_CLASSES, MPI_FLOAT, outputs,
+            samples_per_node * N_CLASSES, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
   // // Free local buffers
 
   cudaFree(gpu_mem_outputs);
   cudaFree(gpu_mem_inputs);
   cudaFree(emb_a->buf);
+  cudaFree(permute_a->buf);
   free(local_inputs);
   free(local_outputs);
+
+
 }
