@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <stdlib.h>
 #include <string.h>
-#define BATCH_SIZE 32 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
+#define BATCH_SIZE 2 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
 #define HIDDEN_DIM 4096
 #define INPUT_CHANNEL HIDDEN_DIM
 #define OUTPUT_CHANNEL 1024
@@ -19,7 +19,6 @@
 #define M3 2 
 #define ELEMENTS_PER_THREAD 4  // Number of elements each thread will process
 #define BLOCK_SIZE 32
-#define NUM_GPUS_PER_NODE 4
       
 /* [Model Parameters]
  * _w: Weight parameter
@@ -167,7 +166,6 @@ typedef struct {
   int M, N, K;
 } ThreadData;
 
-
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int mpi_rank, mpi_size;
@@ -184,7 +182,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       exit(EXIT_FAILURE);
   }
 
-  // non-weights, null value is fine
+  // non-weight
   int * gpu_mem_inputs = nullptr;
   float * gpu_mem_outputs = nullptr;
   cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
@@ -207,7 +205,11 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   cudaMalloc(&linear3_ag, linear3_a->num_elem() * sizeof(float));
 
 
-  // weights, shouold be copied
+  // // tensor buf 다 nullptr로 초기화하는 걸로 바꾸기
+  // cudaMalloc(&emb_a->buf, emb_a->num_elem() * sizeof(float));
+  // cudaMalloc(&permute_a->buf, permute_a->num_elem() * sizeof(float));
+
+  // weights, shouold be cop
   float * emb_wg = nullptr;
   cudaMalloc(&emb_wg, emb_w->num_elem() * sizeof(float));
   cudaMemcpy(emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
