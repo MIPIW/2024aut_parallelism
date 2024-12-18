@@ -249,7 +249,7 @@ void ReLU(Tensor *inout) {
   }
   
   size_t total_elements = B * N; // Total elements across all batches
-
+  
   for (size_t i = 0; i < total_elements; ++i) {
     inout->buf[i] = inout->buf[i] > 0 ? inout->buf[i] : 0;
   }
@@ -261,6 +261,16 @@ __global__ void ReLU_Kernel(float *inout, size_t N) {
   size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < N) {
     inout[i] = inout[i] > 0 ? inout[i] : 0;
+
+  }
+}
+
+__global__ void ReLUKernel(float *inout, size_t N) {
+  size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+  // printf("%llu\t", N);
+  if (i < N) {
+    inout[i] = inout[i] > 0 ? inout[i] : 0;
+
   }
 }
 
@@ -325,8 +335,8 @@ __global__ void GetMaxKernel(float *in, float *out, size_t B, size_t C, size_t S
   if (idx >= total_channels) return;
 
   // Calculate the batch index and channel index
-  size_t batch_idx = idx / C; // Batch index
-  size_t channel_idx = idx % C; // Channel index
+  size_t batch_idx = idx / C;     // Batch index
+  size_t channel_idx = idx % C;   // Channel index
 
   // Initialize the max value for the current channel in the current batch
   size_t base_idx = batch_idx * (C * S) + channel_idx * S;
@@ -340,9 +350,10 @@ __global__ void GetMaxKernel(float *in, float *out, size_t B, size_t C, size_t S
     }
   }
 
-  // Store the maximum value in the output tensor
-  out[batch_idx * C + channel_idx] = max_val;
+  // Store the maximum value in the output array
+  out[idx] = max_val;
 }
+
 
 
 /* Concat
@@ -381,6 +392,44 @@ void Concat(Tensor *in1, Tensor *in2, Tensor *in3, Tensor *in4,
   }
 }
 
+__global__ void ConcatKernel(const float *in1, const float *in2, const float *in3, const float *in4,
+                             float *out, size_t B, size_t N1, size_t N2, size_t N3, size_t N4) {
+    // Get the global thread index
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Calculate the per-batch sizes for each input tensor
+    size_t per_batch_N1 = N1 / B;
+    size_t per_batch_N2 = N2 / B;
+    size_t per_batch_N3 = N3 / B;
+    size_t per_batch_N4 = N4 / B;
+
+    // Calculate the total number of elements per batch
+    size_t total_size_per_batch = per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4;
+
+    // Total number of elements across all batches
+    size_t total_elements = B * total_size_per_batch;
+
+    // Ensure the thread index is within bounds
+    if (idx >= total_elements) return;
+
+    // Determine the batch index
+    size_t b = idx / total_size_per_batch;
+    size_t offset_within_batch = idx % total_size_per_batch;
+
+    // Copy data from the appropriate input tensor
+    if (offset_within_batch < per_batch_N1) {
+        out[idx] = in1[b * per_batch_N1 + offset_within_batch];
+    } else if (offset_within_batch < per_batch_N1 + per_batch_N2) {
+        out[idx] = in2[b * per_batch_N2 + (offset_within_batch - per_batch_N1)];
+    } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3) {
+        out[idx] = in3[b * per_batch_N3 + (offset_within_batch - per_batch_N1 - per_batch_N2)];
+    } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4) {
+        out[idx] = in4[b * per_batch_N4 + (offset_within_batch - per_batch_N1 - per_batch_N2 - per_batch_N3)];
+    }
+}
+
+
+
 /* Batched Linear 
  * @param [in1]  in: [B, N]
  * @param [in2]   w: [M, N]
@@ -407,4 +456,20 @@ void Linear(Tensor *in, Tensor *w, Tensor *bias, Tensor *out) {
   }
 }
 
+__global__ void LinearKernel(const float *in, const float *w, const float *bias, float *out,
+                             size_t B, size_t N, size_t M) {
+    // Batch index (each block processes one batch element)
+    size_t b = blockIdx.x;
+    // Output feature index (each thread processes one output feature)
+    size_t m = threadIdx.x + blockIdx.y * blockDim.x;
 
+    if (b < B && m < M) {
+        float val = 0.0f;
+        // Compute the dot product for the m-th output feature
+        for (size_t j = 0; j < N; ++j) {
+            val += w[m * N + j] * in[b * N + j];
+        }
+        // Add bias and store the result in the output tensor
+        out[b * M + m] = val + bias[m];
+    }
+}
