@@ -475,22 +475,59 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
               contexts[gpu_id].emb_ag, contexts[gpu_id].permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
 
           // Convolutional and pooling layers
+          // Conv2 (Kernel Size 3)
           Conv1DKernelTiled<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream>>>(
               contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
           ReLUKernel<<<dims.reluGridDim1, dims.reluBlockDim1, 0, contexts[gpu_id].stream>>>(
               contexts[gpu_id].conv0_ag, conv0_a->num_elem());
-
           GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream>>>(
               contexts[gpu_id].conv0_ag, contexts[gpu_id].pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 2);
+          // Conv2 (Kernel Size 5)
+          Conv1DKernelTiled<<<dims.convGridDim1, dims.convBlockDim, 0, contexts[gpu_id].stream>>>(
+            contexts[gpu_id].permute_ag, contexts[gpu_id].conv1_wg, contexts[gpu_id].conv1_bg, contexts[gpu_id].conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
+          ReLUKernel<<<dims.reluGridDim2, dims.reluBlockDim2, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv1_ag, conv1_a->num_elem());
+          GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv1_ag, contexts[gpu_id].pool1_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 4);
+          // Conv2 (Kernel Size 7)
+          Conv1DKernelTiled<<<dims.convGridDim2, dims.convBlockDim, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].permute_ag, contexts[gpu_id].conv2_wg, contexts[gpu_id].conv2_bg, contexts[gpu_id].conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
+          ReLUKernel<<<dims.reluGridDim3, dims.reluBlockDim3, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv2_ag, conv2_a->num_elem());
+          GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv2_ag, contexts[gpu_id].pool2_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 6);
+          // Conv3 (Kernel Size 9)
+          Conv1DKernelTiled<<<dims.convGridDim3, dims.convBlockDim, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].permute_ag, contexts[gpu_id].conv3_wg, contexts[gpu_id].conv3_bg, contexts[gpu_id].conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
+          ReLUKernel<<<dims.reluGridDim4, dims.reluBlockDim4, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv3_ag, conv3_a->num_elem());
+          GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].conv3_ag, contexts[gpu_id].pool3_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 8);
 
-          // TODO: add other for other convolutional, ReLU, and pooling layers...
 
-          // Linear layers
+          ConcatKernel<<<dims.concatGridDim, dims.concatBlockDim, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].pool0_ag, contexts[gpu_id].pool1_ag, contexts[gpu_id].pool2_ag, contexts[gpu_id].pool3_ag,
+              contexts[gpu_id].concat_ag, BATCH_SIZE, pool0_a->num_elem(), pool1_a->num_elem(), pool2_a->num_elem(), pool3_a->num_elem());
+
+          // Linear layers 1
           LinearKernelTiled<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream>>>(
-              contexts[gpu_id].pool0_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+              contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
           ReLUKernel<<<dims.reluGridDimLin1, dims.reluBlockDimLin1, 0, contexts[gpu_id].stream>>>(
               contexts[gpu_id].linear0_ag, linear0_a->num_elem());
-
+          // Linear layers 2
+          LinearKernelTiled<<<dims.grid2D1, dims.block1D1, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].linear0_ag, contexts[gpu_id].linear1_wg, contexts[gpu_id].linear1_bg, contexts[gpu_id].linear1_ag, BATCH_SIZE, M0, M1);
+          ReLUKernel<<<dims.reluGridDimLin2, dims.reluBlockDimLin2, 0, contexts[gpu_id].stream>>>(
+              contexts[gpu_id].linear1_ag, linear1_a->num_elem());
+          // Linear layers 3
+          LinearKernelTiled<<<dims.grid2D2, dims.block1D2, 0, contexts[gpu_id].stream>>>(
+            contexts[gpu_id].linear1_ag, contexts[gpu_id].linear2_wg, contexts[gpu_id].linear2_bg, contexts[gpu_id].linear2_ag, BATCH_SIZE, M1, M2);
+          ReLUKernel<<<dims.reluGridDimLin3, dims.reluBlockDimLin3, 0, contexts[gpu_id].stream>>>(
+            contexts[gpu_id].linear2_ag, linear2_a->num_elem());
+          // Linear layers 4
+          LinearKernelTiled<<<dims.grid2D3, dims.block1D3, 0, contexts[gpu_id].stream>>>(
+            contexts[gpu_id].linear2_ag, contexts[gpu_id].linear3_wg, contexts[gpu_id].linear3_bg, contexts[gpu_id].linear3_ag, BATCH_SIZE, M2, M3);
+          
           // Copy the final output back to host asynchronously
           cudaMemcpyAsync(batchOutput, contexts[gpu_id].linear3_ag, BATCH_SIZE * M3 * sizeof(float),
                           cudaMemcpyDeviceToHost, contexts[gpu_id].stream);
