@@ -458,10 +458,13 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
           int *batchInput = local_inputs + (cur_batch * NUM_GPUS_PER_NODE + gpu_id) * BATCH_SIZE * SEQ_LEN;
           float *batchOutput = local_outputs + (cur_batch * NUM_GPUS_PER_NODE + gpu_id) * BATCH_SIZE * M3;
+          int host_debug_buffer[BATCH_SIZE * SEQ_LEN];
 
           // Asynchronous copy input data to GPU
-          cudaMemcpyAsync(contexts[gpu_id].gpu_inputs, batchInput,
-                          BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice, contexts[gpu_id].stream);
+          CUDA_CHECK(cudaMemcpyAsync(contexts[gpu_id].gpu_inputs, batchInput,
+                          BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice, contexts[gpu_id].stream));
+
+          CUDA_CHECK(cudaStreamSynchronize(contexts[gpu_id].stream));
 
           // Embedding layer
           EmbeddingKernel<<<dims.embeddingGridDim, dims.embeddingBlockDim, 0, contexts[gpu_id].stream>>>(
@@ -480,7 +483,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
           GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream>>>(
               contexts[gpu_id].conv0_ag, contexts[gpu_id].pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 2);
 
-          // Add similar calls for other convolutional, ReLU, and pooling layers...
+          // TODO: add other for other convolutional, ReLU, and pooling layers...
 
           // Linear layers
           LinearKernelTiled<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream>>>(
