@@ -160,12 +160,145 @@ void free_activations() {
 // const int NUM_THREADS_PER_NODE = 4;
 
 typedef struct {
-  int gpu_id;
-  float *A;
-  float *B;
-  float *C;
-  int M, N, K;
-} ThreadData;
+    int gpu_id;
+    int *gpu_inputs;
+    float *gpu_outputs;
+    float *emb_wg;
+    float *conv0_wg, *conv0_bg;
+    float *conv1_wg, *conv1_bg;
+    float *conv2_wg, *conv2_bg;
+    float *conv3_wg, *conv3_bg;
+    float *linear0_wg, *linear0_bg;
+    float *linear1_wg, *linear1_bg;
+    float *linear2_wg, *linear2_bg;
+    float *linear3_wg, *linear3_bg;
+
+    float *gpu_inputs, *gpu_outputs;
+    float *emb_ag, *permute_ag;
+    float *pool0_ag, *pool1_ag, *pool2_ag, *pool3_ag;
+    float *linear0_ag, *linear1_ag, *linear2_ag, *linear3_ag;
+
+    cudaStream_t stream;
+} GPUContext;
+
+void initGPUContexts(GPUContext *contexts) {
+    const int NUM_STREAMS = 4; // Using 4 streams per GPU for parallel operations
+
+    for (int i = 0; i < NUM_GPUS_PER_NODE; ++i) {
+        contexts[i].gpu_id = i;
+        CUDA_CHECK(cudaSetDevice(i));
+
+        // Create multiple streams for concurrent memory operations
+        cudaStream_t streams[NUM_STREAMS];
+        for (int j = 0; j < NUM_STREAMS; ++j) {
+            CUDA_CHECK(cudaStreamCreate(&streams[j]));
+        }
+
+        CUDA_CHECK(cudaMalloc(&contexts[i].emb_wg, emb_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[0]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv0_wg, conv0_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv0_bg, conv0_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv0_ag, conv0_a->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv0_wg, conv0_w->buf, conv0_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[1]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv0_bg, conv0_b->buf, conv0_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[1]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv1_wg, conv1_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv1_bg, conv1_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv1_ag, conv1_a->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv1_wg, conv1_w->buf, conv1_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[2]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv1_bg, conv1_b->buf, conv1_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[2]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv2_wg, conv2_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv2_bg, conv2_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv2_ag, conv2_a->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv2_wg, conv2_w->buf, conv2_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[3]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv2_bg, conv2_b->buf, conv2_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[3]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv3_wg, conv3_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv3_bg, conv3_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].conv3_ag, conv3_a->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv3_wg, conv3_w->buf, conv3_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[0]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].conv3_bg, conv3_b->buf, conv3_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[0]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear0_wg, linear0_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear0_bg, linear0_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear0_wg, linear0_w->buf, linear0_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[1]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear0_bg, linear0_b->buf, linear0_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[1]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear1_wg, linear1_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear1_bg, linear1_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear1_wg, linear1_w->buf, linear1_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[2]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear1_bg, linear1_b->buf, linear1_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[2]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear2_wg, linear2_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear2_bg, linear2_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear2_wg, linear2_w->buf, linear2_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[3]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear2_bg, linear2_b->buf, linear2_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[3]));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear3_wg, linear3_w->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&contexts[i].linear3_bg, linear3_b->num_elem() * sizeof(float)));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear3_wg, linear3_w->buf, linear3_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[0]));
+        CUDA_CHECK(cudaMemcpyAsync(contexts[i].linear3_bg, linear3_b->buf, linear3_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice, streams[0]));
+
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].gpu_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int), streams[0]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].gpu_outputs, BATCH_SIZE * M3 * sizeof(float), streams[0]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].emb_ag, emb_a->num_elem() * sizeof(float), streams[1]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].permute_ag, permute_a->num_elem() * sizeof(float), streams[1]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].pool0_ag, pool0_a->num_elem() * sizeof(float), streams[2]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].pool1_ag, pool1_a->num_elem() * sizeof(float), streams[2]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].pool2_ag, pool2_a->num_elem() * sizeof(float), streams[2]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].pool3_ag, pool3_a->num_elem() * sizeof(float), streams[2]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].concat_ag, concat_a->num_elem() * sizeof(float), streams[3]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].linear0_ag, linear0_a->num_elem() * sizeof(float), streams[3]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].linear1_ag, linear1_a->num_elem() * sizeof(float), streams[3]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].linear2_ag, linear2_a->num_elem() * sizeof(float), streams[3]));
+        CUDA_CHECK(cudaMallocAsync(&contexts[i].linear3_ag, linear3_a->num_elem() * sizeof(float), streams[3]));
+
+        // Synchronize all streams for this GPU
+        for (int j = 0; j < NUM_STREAMS; ++j) {
+            CUDA_CHECK(cudaStreamSynchronize(streams[j]));
+            CUDA_CHECK(cudaStreamDestroy(streams[j]));
+        }
+    }
+}
+
+
+void freeGPUContexts(GPUContext *contexts) {
+    for (int i = 0; i < NUM_GPUS_PER_NODE; ++i) {
+        CUDA_CHECK(cudaSetDevice(contexts[i].gpu_id));
+
+        CUDA_CHECK(cudaFree(contexts[i].emb_wg));
+        CUDA_CHECK(cudaFree(contexts[i].conv0_wg));
+        CUDA_CHECK(cudaFree(contexts[i].conv0_bg));
+        CUDA_CHECK(cudaFree(contexts[i].conv0_ag));
+        CUDA_CHECK(cudaFree(contexts[i].conv1_wg));
+        CUDA_CHECK(cudaFree(contexts[i].conv1_bg));
+        CUDA_CHECK(cudaFree(contexts[i].conv1_ag));
+        CUDA_CHECK(cudaFree(contexts[i].conv2_wg));
+        CUDA_CHECK(cudaFree(contexts[i].conv2_bg));
+        CUDA_CHECK(cudaFree(contexts[i].conv2_ag));
+        CUDA_CHECK(cudaFree(contexts[i].conv3_wg));
+        CUDA_CHECK(cudaFree(contexts[i].conv3_bg));
+        CUDA_CHECK(cudaFree(contexts[i].conv3_ag));
+        CUDA_CHECK(cudaFree(contexts[i].linear0_wg));
+        CUDA_CHECK(cudaFree(contexts[i].linear0_bg));
+        CUDA_CHECK(cudaFree(contexts[i].linear1_wg));
+        CUDA_CHECK(cudaFree(contexts[i].linear1_bg));
+        CUDA_CHECK(cudaFree(contexts[i].linear2_wg));
+        CUDA_CHECK(cudaFree(contexts[i].linear2_bg));
+        CUDA_CHECK(cudaFree(contexts[i].linear3_wg));
+        CUDA_CHECK(cudaFree(contexts[i].linear3_bg));
+
+
+        CUDA_CHECK(cudaFree(contexts[i].gpu_inputs));
+        CUDA_CHECK(cudaFree(contexts[i].gpu_outputs));
+        CUDA_CHECK(cudaFree(contexts[i].emb_ag));
+        CUDA_CHECK(cudaFree(contexts[i].permute_ag));
+        CUDA_CHECK(cudaFree(contexts[i].pool0_ag));
+        CUDA_CHECK(cudaFree(contexts[i].pool1_ag));
+        CUDA_CHECK(cudaFree(contexts[i].pool2_ag));
+        CUDA_CHECK(cudaFree(contexts[i].pool3_ag));
+        CUDA_CHECK(cudaFree(contexts[i].concat_ag));
+        CUDA_CHECK(cudaFree(contexts[i].linear0_ag));
+        CUDA_CHECK(cudaFree(contexts[i].linear1_ag));
+        CUDA_CHECK(cudaFree(contexts[i].linear2_ag));
+        CUDA_CHECK(cudaFree(contexts[i].linear3_ag));
+        CUDA_CHECK(cudaStreamDestroy(contexts[i].stream));
+    }
+}
 
 
 /* [Model Computation: Sentiment Analysis Task] */
@@ -179,116 +312,32 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
   int *local_inputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));
   float *local_outputs = (float *)malloc(samples_per_node * SEQ_LEN * sizeof(float));  
-  if (!local_outputs) {
-      fprintf(stderr, "Failed to allocate memory for local_outputs\n");
-      exit(EXIT_FAILURE);
-  }
-
-  // non-weights, null value is fine
-  int * gpu_mem_inputs = nullptr;
-  float * gpu_mem_outputs = nullptr;
-  cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
-  cudaMalloc(&gpu_mem_outputs, BATCH_SIZE * N_CLASSES * sizeof(float));
-
-  float *emb_ag, *permute_ag;
-  cudaMalloc(&emb_ag, emb_a->num_elem() * sizeof(float));
-  cudaMalloc(&permute_ag, permute_a->num_elem() * sizeof(float));
-  float *pool0_ag, *pool1_ag, *pool2_ag, *pool3_ag;
-  cudaMalloc(&pool0_ag, pool0_a->num_elem() * sizeof(float));
-  cudaMalloc(&pool1_ag, pool1_a->num_elem() * sizeof(float));
-  cudaMalloc(&pool2_ag, pool2_a->num_elem() * sizeof(float));
-  cudaMalloc(&pool3_ag, pool3_a->num_elem() * sizeof(float));
-  float *concat_ag;
-  cudaMalloc(&concat_ag, concat_a->num_elem() * sizeof(float));
-  float *linear0_ag, *linear1_ag, *linear2_ag, *linear3_ag;
-  cudaMalloc(&linear0_ag, linear0_a->num_elem() * sizeof(float));
-  cudaMalloc(&linear1_ag, linear1_a->num_elem() * sizeof(float));
-  cudaMalloc(&linear2_ag, linear2_a->num_elem() * sizeof(float));
-  cudaMalloc(&linear3_ag, linear3_a->num_elem() * sizeof(float));
-
-
-  // weights, shouold be copied
-  float * emb_wg = nullptr;
-  cudaMalloc(&emb_wg, emb_w->num_elem() * sizeof(float));
-  cudaMemcpy(emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  float *conv0_wg, *conv0_bg, *conv0_ag = nullptr;
-  cudaMalloc(&conv0_wg, conv0_w->num_elem() * sizeof(float));
-  cudaMalloc(&conv0_bg, conv0_b->num_elem() * sizeof(float));
-  cudaMalloc(&conv0_ag, conv0_a->num_elem() * sizeof(float));
-  cudaMemcpy(conv0_wg, conv0_w->buf, conv0_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv0_bg, conv0_b->buf, conv0_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv0_ag, conv0_a->buf, conv0_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  float *conv1_wg, *conv1_bg, *conv1_ag = nullptr;
-  cudaMalloc(&conv1_wg, conv1_w->num_elem() * sizeof(float));
-  cudaMalloc(&conv1_bg, conv1_b->num_elem() * sizeof(float));
-  cudaMalloc(&conv1_ag, conv1_a->num_elem() * sizeof(float));
-  cudaMemcpy(conv1_wg, conv1_w->buf, conv1_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv1_bg, conv1_b->buf, conv1_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv1_ag, conv1_a->buf, conv1_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  float *conv2_wg, *conv2_bg, *conv2_ag = nullptr;
-  cudaMalloc(&conv2_wg, conv2_w->num_elem() * sizeof(float));
-  cudaMalloc(&conv2_bg, conv2_b->num_elem() * sizeof(float));
-  cudaMalloc(&conv2_ag, conv2_a->num_elem() * sizeof(float));
-  cudaMemcpy(conv2_wg, conv2_w->buf, conv2_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv2_bg, conv2_b->buf, conv2_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv2_ag, conv2_a->buf, conv2_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  float *conv3_wg, *conv3_bg, *conv3_ag = nullptr;
-  cudaMalloc(&conv3_wg, conv3_w->num_elem() * sizeof(float));
-  cudaMalloc(&conv3_bg, conv3_b->num_elem() * sizeof(float));
-  cudaMalloc(&conv3_ag, conv3_a->num_elem() * sizeof(float));
-  cudaMemcpy(conv3_wg, conv3_w->buf, conv3_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv3_bg, conv3_b->buf, conv3_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(conv3_ag, conv3_a->buf, conv3_a->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  float *linear0_wg, *linear0_bg;
-  float *linear1_wg, *linear1_bg;
-  float *linear2_wg, *linear2_bg;
-  float *linear3_wg, *linear3_bg;
-  cudaMalloc(&linear0_wg, linear0_w->num_elem() * sizeof(float));
-  cudaMalloc(&linear1_wg, linear1_w->num_elem() * sizeof(float));
-  cudaMalloc(&linear2_wg, linear2_w->num_elem() * sizeof(float));
-  cudaMalloc(&linear3_wg, linear3_w->num_elem() * sizeof(float));
-  cudaMalloc(&linear0_bg, linear0_b->num_elem() * sizeof(float));
-  cudaMalloc(&linear1_bg, linear1_b->num_elem() * sizeof(float));
-  cudaMalloc(&linear2_bg, linear2_b->num_elem() * sizeof(float));
-  cudaMalloc(&linear3_bg, linear3_b->num_elem() * sizeof(float));
-  cudaMemcpy(linear0_wg, linear0_w->buf, linear0_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear1_wg, linear1_w->buf, linear1_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear2_wg, linear2_w->buf, linear2_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear3_wg, linear3_w->buf, linear3_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear0_bg, linear0_b->buf, linear0_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear1_bg, linear1_b->buf, linear1_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear2_bg, linear2_b->buf, linear2_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(linear3_bg, linear3_b->buf, linear3_b->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
-  
-  
+  // if (!local_outputs) {
+  //     fprintf(stderr, "Failed to allocate memory for local_outputs\n");
+  //     exit(EXIT_FAILURE);
+  // }
 
   // 노드에 n개 인풋 퍼뜨림(32 -> 8)
   int mpi_status = MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
               samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
 
-  if (mpi_status != MPI_SUCCESS) {
-    fprintf(stderr, "MPI_Scatter failed\n");
-    exit(EXIT_FAILURE);
-  }
+  // if (mpi_status != MPI_SUCCESS) {
+  //   fprintf(stderr, "MPI_Scatter failed\n");
+  //   exit(EXIT_FAILURE);
+  // }
+
+  GPUContext contexts[NUM_GPUS_PER_NODE];
+  initGPUContexts(contexts);
+
 
   // int embeddingCount = SEQ_LEN * BATCH_SIZE; // 16 * 2 = 32
   int embeddingBlockDim = SEQ_LEN ; // sequence length
   int embeddingGridDim = BATCH_SIZE;
-
-  // dim3 embeddingGridDim(SEQ_LEN, BATCH_SIZE);
-  // dim3 embeddingBlockDim(SEQ_LEN);
-  // dim3 embeddingBlockDim(SEQ_LEN, 4);
-  // dim3 embeddingGridDim(BATCH_SIZE * SEQ_LEN + SEQ_LEN - 1 / SEQ_LEN);
-  
-
   int permuteCount = emb_a->num_elem(); // 16 * 2 * 4096
   int permuteBlockDim = 32 ; // sequence length
   int permuteGridDim = permuteCount / permuteBlockDim;
-  
-  int convCount1 = SEQ_LEN * BATCH_SIZE; // enbedding dim added 
-  // int convBlockDim1 = convCount1 / BATCH_SIZE ; // sequence length
-  // int convGridDim1 = BATCH_SIZE;   
 
+  int convCount1 = SEQ_LEN * BATCH_SIZE; // enbedding dim added 
   dim3 convBlockDim(BLOCK_SIZE, BLOCK_SIZE); // sequence length
   dim3 convGridDim0(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 3 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
   dim3 convGridDim1(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 5 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -311,11 +360,6 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int reluCount4 = conv3_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
   int reluBlockDim4 = 32; // cannot exceed 1324
   int reluGridDim4 = reluCount4 / reluBlockDim4;
-  // int reluGridDim4 = (reluCount4 + reluBlockDim4 * 4 - 1) / (reluBlockDim4 * 4);
-
-  // int concatCount = concat_a->num_elem();
-  // int concatBlockDim = 256;
-  // int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
 
   int concatCount = concat_a->num_elem();
   int concatBlockDim = 256;
@@ -440,12 +484,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
   // // Free local buffers
 
-  cudaFree(gpu_mem_outputs);
-  cudaFree(gpu_mem_inputs);
-  cudaFree(emb_a->buf);
-  cudaFree(permute_a->buf);
-  free(local_inputs);
-  free(local_outputs);
+  freeGPUContexts(contexts);
 
 
 }
