@@ -2,6 +2,7 @@
 
 #include "layer.h"
 #define BLOCK_SIZE 32  // Tile size for shared memory (tune for best performance)
+#define ELEMENTS_PER_THREAD 4 // Number of elements each thread will process
 
 // #define TILE_SIZE 16
 // #define C_SIZE 16
@@ -102,6 +103,39 @@ __global__ void EmbeddingKernel(int *in, float *w, float *out, size_t B, size_t 
     out[out_offset + j] = w[vocab_idx * H + j];
   }
 }
+
+
+
+ // Number of elements each thread copies from the embedding
+
+__global__ void EmbeddingKernelOptimized(int *in, float *w, float *out, size_t B, size_t S, size_t H) {
+    // Batch index (blockIdx.y) and sequence index (blockIdx.x)
+    size_t batch_idx = blockIdx.y;
+    size_t seq_idx = blockIdx.x;
+
+    // Offset for the vocabulary index
+    int vocab_idx = in[batch_idx * S + seq_idx];
+    if (vocab_idx < 0 || vocab_idx >= 21635) return; // Bounds check for vocabulary size
+
+    // Each thread processes a chunk of `ELEMENTS_PER_THREAD` dimensions
+    size_t thread_offset = threadIdx.x * ELEMENTS_PER_THREAD;
+
+    // Ensure we don't go out of bounds
+    if (thread_offset >= H) return;
+
+    // Compute the output offset for this batch and sequence position
+    size_t out_offset = batch_idx * (S * H) + seq_idx * H + thread_offset;
+
+    // Compute the embedding weight offset
+    size_t w_offset = vocab_idx * H + thread_offset;
+
+    // Copy the embedding vector chunk
+    #pragma unroll
+    for (int i = 0; i < ELEMENTS_PER_THREAD && (thread_offset + i) < H; ++i) {
+        out[out_offset + i] = w[w_offset + i];
+    }
+}
+
 
 
 /* Permute
@@ -235,6 +269,40 @@ __global__ void Conv1DKernel(
     out[b * (OC * os) + oc * os + j] = val + bias[oc];
   }
 }
+  // Tile size for shared memory (tune based on hardware capabilities)
+
+__global__ void Conv1DKernelTiled(
+    const float *in, const float *w, const float *bias, float *out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) {
+    
+    // Output sequence length
+    size_t os = s - K + 1;
+
+    // Batch index (each block processes one batch element)
+    size_t b = blockIdx.x;
+
+    // Output channel index
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Sequence position index
+    size_t j = blockIdx.z * blockDim.x + threadIdx.x;
+
+    // Ensure within bounds
+    if (b >= B || oc >= OC || j >= os) return;
+
+    // Accumulator for the convolution result
+    float val = 0.0f;
+
+    // Compute the convolution for the current output channel, sequence position, and batch
+    for (size_t c = 0; c < C; ++c) {
+        for (size_t k = 0; k < K; ++k) {
+            val += in[b * (C * s) + c * s + j + k] * w[oc * (C * K) + c * K + k];
+        }
+    }
+
+    // Add bias and store the result in the output tensor
+    out[b * (OC * os) + oc * os + j] = val + bias[oc];
+}
 
 
 
@@ -271,9 +339,36 @@ __global__ void ReLUKernel(float *inout, size_t N) {
   size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   // printf("%llu\t", N);
   if (i < N) {
+    // inout[i] = fmax(inout[i], 0.0f);
     inout[i] = inout[i] > 0 ? inout[i] : 0;
 
   }
+}
+
+__global__ void ReLUKernelVectorized(float *inout, size_t N) {
+    size_t i = blockIdx.x * blockDim.x * 4 + threadIdx.x;
+
+    // Process four elements per thread using vectorized operations
+    float4 *vec_inout = reinterpret_cast<float4*>(inout);
+    size_t num_vectors = N / 4;
+
+    for (size_t idx = i / 4; idx < num_vectors; idx += gridDim.x * blockDim.x) {
+        float4 val = vec_inout[idx];
+        val.x = fmaxf(val.x, 0.0f);
+        val.y = fmaxf(val.y, 0.0f);
+        val.z = fmaxf(val.z, 0.0f);
+        val.w = fmaxf(val.w, 0.0f);
+        vec_inout[idx] = val;
+    }
+
+    // Handle remaining elements if N is not a multiple of 4
+    size_t remaining = N % 4;
+    size_t remainder_start = N - remaining;
+    i = remainder_start + threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (i < N) {
+        inout[i] = fmaxf(inout[i], 0.0f);
+    }
 }
 
 
@@ -394,42 +489,80 @@ void Concat(Tensor *in1, Tensor *in2, Tensor *in3, Tensor *in4,
   }
 }
 
+// __global__ void ConcatKernel(const float *in1, const float *in2, const float *in3, const float *in4,
+//                              float *out, size_t B, size_t N1, size_t N2, size_t N3, size_t N4) {
+//     // Get the global thread index
+//     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     // Calculate the per-batch sizes for each input tensor
+//     size_t per_batch_N1 = N1 / B;
+//     size_t per_batch_N2 = N2 / B;
+//     size_t per_batch_N3 = N3 / B;
+//     size_t per_batch_N4 = N4 / B;
+
+//     // Calculate the total number of elements per batch
+//     size_t total_size_per_batch = per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4;
+
+//     // Total number of elements across all batches
+//     size_t total_elements = B * total_size_per_batch;
+
+//     // Ensure the thread index is within bounds
+//     if (idx >= total_elements) return;
+
+//     // Determine the batch index
+//     size_t b = idx / total_size_per_batch;
+//     size_t offset_within_batch = idx % total_size_per_batch;
+
+//     // Copy data from the appropriate input tensor
+//     if (offset_within_batch < per_batch_N1) {
+//         out[idx] = in1[b * per_batch_N1 + offset_within_batch];
+//     } else if (offset_within_batch < per_batch_N1 + per_batch_N2) {
+//         out[idx] = in2[b * per_batch_N2 + (offset_within_batch - per_batch_N1)];
+//     } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3) {
+//         out[idx] = in3[b * per_batch_N3 + (offset_within_batch - per_batch_N1 - per_batch_N2)];
+//     } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4) {
+//         out[idx] = in4[b * per_batch_N4 + (offset_within_batch - per_batch_N1 - per_batch_N2 - per_batch_N3)];
+//     }
+// }
+
+
 __global__ void ConcatKernel(const float *in1, const float *in2, const float *in3, const float *in4,
                              float *out, size_t B, size_t N1, size_t N2, size_t N3, size_t N4) {
-    // Get the global thread index
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // Calculate the per-batch sizes for each input tensor
+    // Calculate the total number of elements per batch
     size_t per_batch_N1 = N1 / B;
     size_t per_batch_N2 = N2 / B;
     size_t per_batch_N3 = N3 / B;
     size_t per_batch_N4 = N4 / B;
-
-    // Calculate the total number of elements per batch
     size_t total_size_per_batch = per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4;
 
-    // Total number of elements across all batches
-    size_t total_elements = B * total_size_per_batch;
+    // Global thread index, adjusted to process multiple elements per thread
+    size_t idx = (blockIdx.x * blockDim.x + threadIdx.x) * ELEMENTS_PER_THREAD;
 
-    // Ensure the thread index is within bounds
-    if (idx >= total_elements) return;
+    // Ensure we are within bounds
+    if (idx >= B * total_size_per_batch) return;
 
     // Determine the batch index
     size_t b = idx / total_size_per_batch;
     size_t offset_within_batch = idx % total_size_per_batch;
 
-    // Copy data from the appropriate input tensor
-    if (offset_within_batch < per_batch_N1) {
-        out[idx] = in1[b * per_batch_N1 + offset_within_batch];
-    } else if (offset_within_batch < per_batch_N1 + per_batch_N2) {
-        out[idx] = in2[b * per_batch_N2 + (offset_within_batch - per_batch_N1)];
-    } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3) {
-        out[idx] = in3[b * per_batch_N3 + (offset_within_batch - per_batch_N1 - per_batch_N2)];
-    } else if (offset_within_batch < per_batch_N1 + per_batch_N2 + per_batch_N3 + per_batch_N4) {
-        out[idx] = in4[b * per_batch_N4 + (offset_within_batch - per_batch_N1 - per_batch_N2 - per_batch_N3)];
+    // Process multiple elements per thread
+    #pragma unroll
+    for (int i = 0; i < ELEMENTS_PER_THREAD; i++) {
+        if (idx + i >= B * total_size_per_batch) break;
+
+        size_t current_offset = offset_within_batch + i;
+
+        if (current_offset < per_batch_N1) {
+            out[idx + i] = in1[b * per_batch_N1 + current_offset];
+        } else if (current_offset < per_batch_N1 + per_batch_N2) {
+            out[idx + i] = in2[b * per_batch_N2 + (current_offset - per_batch_N1)];
+        } else if (current_offset < per_batch_N1 + per_batch_N2 + per_batch_N3) {
+            out[idx + i] = in3[b * per_batch_N3 + (current_offset - per_batch_N1 - per_batch_N2)];
+        } else {
+            out[idx + i] = in4[b * per_batch_N4 + (current_offset - per_batch_N1 - per_batch_N2 - per_batch_N3)];
+        }
     }
 }
-
 
 
 /* Batched Linear 

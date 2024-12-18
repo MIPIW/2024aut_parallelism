@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <stdlib.h>
 #include <string.h>
-#define BATCH_SIZE 2 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
+#define BATCH_SIZE 32 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
 #define HIDDEN_DIM 4096
 #define INPUT_CHANNEL HIDDEN_DIM
 #define OUTPUT_CHANNEL 1024
@@ -17,7 +17,9 @@
 #define M1 1024
 #define M2 512
 #define M3 2 
-
+#define ELEMENTS_PER_THREAD 4  // Number of elements each thread will process
+#define BLOCK_SIZE 32
+#define NUM_GPUS_PER_NODE 4
       
 /* [Model Parameters]
  * _w: Weight parameter
@@ -165,6 +167,7 @@ typedef struct {
   int M, N, K;
 } ThreadData;
 
+
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int mpi_rank, mpi_size;
@@ -181,7 +184,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       exit(EXIT_FAILURE);
   }
 
-  // non-weight
+  // non-weights, null value is fine
   int * gpu_mem_inputs = nullptr;
   float * gpu_mem_outputs = nullptr;
   cudaMalloc(&gpu_mem_inputs, BATCH_SIZE * SEQ_LEN * sizeof(int));
@@ -204,11 +207,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   cudaMalloc(&linear3_ag, linear3_a->num_elem() * sizeof(float));
 
 
-  // // tensor buf 다 nullptr로 초기화하는 걸로 바꾸기
-  // cudaMalloc(&emb_a->buf, emb_a->num_elem() * sizeof(float));
-  // cudaMalloc(&permute_a->buf, permute_a->num_elem() * sizeof(float));
-
-  // weight
+  // weights, shouold be copied
   float * emb_wg = nullptr;
   cudaMalloc(&emb_wg, emb_w->num_elem() * sizeof(float));
   cudaMemcpy(emb_wg, emb_w->buf, emb_w->num_elem() * sizeof(float), cudaMemcpyHostToDevice);
@@ -276,13 +275,26 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int embeddingBlockDim = SEQ_LEN ; // sequence length
   int embeddingGridDim = BATCH_SIZE;
 
+  // dim3 embeddingGridDim(SEQ_LEN, BATCH_SIZE);
+  // dim3 embeddingBlockDim(SEQ_LEN);
+  // dim3 embeddingBlockDim(SEQ_LEN, 4);
+  // dim3 embeddingGridDim(BATCH_SIZE * SEQ_LEN + SEQ_LEN - 1 / SEQ_LEN);
+  
+
   int permuteCount = emb_a->num_elem(); // 16 * 2 * 4096
   int permuteBlockDim = 32 ; // sequence length
   int permuteGridDim = permuteCount / permuteBlockDim;
   
   int convCount1 = SEQ_LEN * BATCH_SIZE; // enbedding dim added 
-  int convBlockDim1 = convCount1 / BATCH_SIZE ; // sequence length
-  int convGridDim1 = BATCH_SIZE; 
+  // int convBlockDim1 = convCount1 / BATCH_SIZE ; // sequence length
+  // int convGridDim1 = BATCH_SIZE;   
+
+  dim3 convBlockDim(BLOCK_SIZE, BLOCK_SIZE); // sequence length
+  dim3 convGridDim0(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 3 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+  dim3 convGridDim1(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 5 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+  dim3 convGridDim2(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 7 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+  dim3 convGridDim3(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 9 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+  
   int getMaxCount1 = BATCH_SIZE * OUTPUT_CHANNEL;
   int getMaxBlockDim1 = 32; // cannot exceed 1024
   int getMaxGridDim1 = getMaxCount1 / getMaxBlockDim1; 
@@ -299,10 +311,15 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int reluCount4 = conv3_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
   int reluBlockDim4 = 32; // cannot exceed 1324
   int reluGridDim4 = reluCount4 / reluBlockDim4;
+  // int reluGridDim4 = (reluCount4 + reluBlockDim4 * 4 - 1) / (reluBlockDim4 * 4);
+
+  // int concatCount = concat_a->num_elem();
+  // int concatBlockDim = 256;
+  // int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
 
   int concatCount = concat_a->num_elem();
   int concatBlockDim = 256;
-  int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
+  int concatGridDim = (concatCount + ELEMENTS_PER_THREAD * concatBlockDim - 1) / (ELEMENTS_PER_THREAD * concatBlockDim);
 
   int linearBlockDim1 = 32;
   int linearGridDim11 = (HIDDEN_DIM + linearBlockDim1 - 1) / linearBlockDim1;
@@ -354,25 +371,24 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       PermuteKernel<<<permuteGridDim, permuteBlockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
       
       // [B * 4096 * 16] -> [B * 1024 * 14]
-      Conv1DKernel<<<convGridDim1, convBlockDim1>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
+      Conv1DKernelTiled<<<convGridDim0, convBlockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
       ReLUKernel<<<reluGridDim1,reluBlockDim1>>>(conv0_ag, conv0_a->num_elem());
       // [B * 1024 * 14] -> [B * 1024]
       GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv0_ag, pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-2);
 
       // [B * 4096] -> [B * 1024 * 12]
-      Conv1DKernel<<<convGridDim1, convBlockDim1>>>(permute_ag, conv1_wg, conv1_bg, conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
+      Conv1DKernelTiled<<<convGridDim1, convBlockDim>>>(permute_ag, conv1_wg, conv1_bg, conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
       ReLUKernel<<<reluGridDim2,reluBlockDim2>>>(conv1_ag, conv1_a->num_elem());
       // [B * 1024 * 12] -> [B * 1024]
       GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv1_ag, pool1_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-4);
-      
       // [B * 4096] -> [B * 1024 * 10]
-      Conv1DKernel<<<convGridDim1, convBlockDim1>>>(permute_ag, conv2_wg, conv2_bg, conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
+      Conv1DKernelTiled<<<convGridDim2, convBlockDim>>>(permute_ag, conv2_wg, conv2_bg, conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
       ReLUKernel<<<reluGridDim3,reluBlockDim3>>>(conv2_ag, conv2_a->num_elem());
       // [B * 1024 * 10] -> [B * 1024]
       GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv2_ag, pool2_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-6);
 
       // [B * 4096] -> [B * 1024 * 8]
-      Conv1DKernel<<<convGridDim1, convBlockDim1>>>(permute_ag, conv3_wg, conv3_bg, conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
+      Conv1DKernelTiled<<<convGridDim3, convBlockDim>>>(permute_ag, conv3_wg, conv3_bg, conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
       ReLUKernel<<<reluGridDim4,reluBlockDim4>>>(conv3_ag, conv3_a->num_elem());
       // [B * 1024 * 8] -> [B * 1024]
       GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv3_ag, pool3_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-8);
