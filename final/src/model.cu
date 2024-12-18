@@ -166,6 +166,114 @@ typedef struct {
   int M, N, K;
 } ThreadData;
 
+struct GridBlockDims {
+    int embeddingBlockDim;
+    int embeddingGridDim;
+    int permuteBlockDim;
+    int permuteGridDim;
+
+    dim3 convBlockDim;
+    dim3 convGridDim0;
+    dim3 convGridDim1;
+    dim3 convGridDim2;
+    dim3 convGridDim3;
+
+    int getMaxBlockDim1;
+    int getMaxGridDim1;
+
+    int reluBlockDim1;
+    int reluGridDim1;
+    int reluBlockDim2;
+    int reluGridDim2;
+    int reluBlockDim3;
+    int reluGridDim3;
+    int reluBlockDim4;
+    int reluGridDim4;
+
+    int concatBlockDim;
+    int concatGridDim;
+
+    dim3 grid2D0;
+    dim3 block1D0;
+    dim3 grid2D1;
+    dim3 block1D1;
+    dim3 grid2D2;
+    dim3 block1D2;
+    dim3 grid2D3;
+    dim3 block1D3;
+
+    int reluBlockDimLin1;
+    int reluGridDimLin1;
+    int reluBlockDimLin2;
+    int reluGridDimLin2;
+    int reluBlockDimLin3;
+    int reluGridDimLin3;
+};
+
+GridBlockDims initializeGridAndBlockDimensions() {
+    GridBlockDims dims;
+
+    // Embedding dimensions
+    dims.embeddingBlockDim = SEQ_LEN;
+    dims.embeddingGridDim = BATCH_SIZE;
+
+    // Permute dimensions
+    int permuteCount = BATCH_SIZE * SEQ_LEN * HIDDEN_DIM;
+    dims.permuteBlockDim = BLOCK_SIZE;
+    dims.permuteGridDim = (permuteCount + dims.permuteBlockDim - 1) / dims.permuteBlockDim;
+
+    // Convolution dimensions
+    dims.convBlockDim = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    dims.convGridDim0 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 3 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim1 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 5 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim2 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 7 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim3 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 9 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+    // Max pooling dimensions
+    dims.getMaxBlockDim1 = BLOCK_SIZE;
+    dims.getMaxGridDim1 = (BATCH_SIZE * OUTPUT_CHANNEL + dims.getMaxBlockDim1 - 1) / dims.getMaxBlockDim1;
+
+    // ReLU dimensions for convolutional layers
+    dims.reluBlockDim1 = BLOCK_SIZE;
+    dims.reluGridDim1 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 2) + dims.reluBlockDim1 - 1) / dims.reluBlockDim1;
+    dims.reluBlockDim2 = BLOCK_SIZE;
+    dims.reluGridDim2 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 4) + dims.reluBlockDim2 - 1) / dims.reluBlockDim2;
+    dims.reluBlockDim3 = BLOCK_SIZE;
+    dims.reluGridDim3 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 6) + dims.reluBlockDim3 - 1) / dims.reluBlockDim3;
+    dims.reluBlockDim4 = BLOCK_SIZE;
+    dims.reluGridDim4 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 8) + dims.reluBlockDim4 - 1) / dims.reluBlockDim4;
+
+    // Concat dimensions
+    int concatCount = BATCH_SIZE * OUTPUT_CHANNEL * 4;
+    dims.concatBlockDim = BLOCK_SIZE;
+    dims.concatGridDim = (concatCount + ELEMENTS_PER_THREAD * dims.concatBlockDim - 1) / (ELEMENTS_PER_THREAD * dims.concatBlockDim);
+
+    // Linear dimensions
+    dims.grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE - 1) / BLOCK_SIZE, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D1 = dim3((M0 + BLOCK_SIZE - 1) / BLOCK_SIZE, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D1 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D2 = dim3((M1 + BLOCK_SIZE-1) / BLOCK_SIZE, (M2 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D2 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D3 = dim3((M2 + BLOCK_SIZE-1) / BLOCK_SIZE, (M3 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D3 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    // ReLU dimensions for linear layers
+    dims.reluBlockDimLin1 = BLOCK_SIZE;
+    dims.reluGridDimLin1 = (BATCH_SIZE * M0 + dims.reluBlockDimLin1 - 1) / dims.reluBlockDimLin1;
+
+    dims.reluBlockDimLin2 = BLOCK_SIZE;
+    dims.reluGridDimLin2 = (BATCH_SIZE * M1 + dims.reluBlockDimLin2 - 1) / dims.reluBlockDimLin2;
+
+    dims.reluBlockDimLin3 = BLOCK_SIZE;
+    dims.reluGridDimLin3 = (BATCH_SIZE * M2 + dims.reluBlockDimLin3 - 1) / dims.reluBlockDimLin3;
+
+    return dims;
+}
+
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int mpi_rank, mpi_size;
@@ -273,91 +381,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
     exit(EXIT_FAILURE);
   }
 
-  // int embeddingCount = SEQ_LEN * BATCH_SIZE; // 16 * 2 = 32
-  int embeddingBlockDim = SEQ_LEN ; // sequence length
-  int embeddingGridDim = BATCH_SIZE;
-
-  // dim3 embeddingGridDim(SEQ_LEN, BATCH_SIZE);
-  // dim3 embeddingBlockDim(SEQ_LEN);
-  // dim3 embeddingBlockDim(SEQ_LEN, 4);
-  // dim3 embeddingGridDim(BATCH_SIZE * SEQ_LEN + SEQ_LEN - 1 / SEQ_LEN);
-  
-
-  int permuteCount = emb_a->num_elem(); // 16 * 2 * 4096
-  int permuteBlockDim = 32 ; // sequence length
-  int permuteGridDim = permuteCount / permuteBlockDim;
-  
-  int convCount1 = SEQ_LEN * BATCH_SIZE; // enbedding dim added 
-  // int convBlockDim1 = convCount1 / BATCH_SIZE ; // sequence length
-  // int convGridDim1 = BATCH_SIZE;   
-
-  dim3 convBlockDim(BLOCK_SIZE, BLOCK_SIZE); // sequence length
-  dim3 convGridDim0(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 3 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
-  dim3 convGridDim1(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 5 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
-  dim3 convGridDim2(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 7 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
-  dim3 convGridDim3(BATCH_SIZE, (OUTPUT_CHANNEL+BLOCK_SIZE+1) / BLOCK_SIZE, (SEQ_LEN - 9 +1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
-  
-  int getMaxCount1 = BATCH_SIZE * OUTPUT_CHANNEL;
-  int getMaxBlockDim1 = 32; // cannot exceed 1024
-  int getMaxGridDim1 = getMaxCount1 / getMaxBlockDim1; 
-  
-  int reluCount1 = conv0_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
-  int reluBlockDim1 = 32; // cannot exceed 1024
-  int reluGridDim1 = reluCount1 / reluBlockDim1;
-  int reluCount2 = conv1_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
-  int reluBlockDim2 = 32; // cannot exceed 1124
-  int reluGridDim2 = reluCount2 / reluBlockDim2; 
-  int reluCount3 = conv2_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
-  int reluBlockDim3 = 32; // cannot exceed 1224
-  int reluGridDim3 = reluCount3 / reluBlockDim3;
-  int reluCount4 = conv3_a->num_elem(); // 28672 = HIDDEN_DIM * (SEQ_LEN-2) * BATCH_SIZE
-  int reluBlockDim4 = 32; // cannot exceed 1324
-  int reluGridDim4 = reluCount4 / reluBlockDim4;
-  // int reluGridDim4 = (reluCount4 + reluBlockDim4 * 4 - 1) / (reluBlockDim4 * 4);
-
-  // int concatCount = concat_a->num_elem();
-  // int concatBlockDim = 256;
-  // int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
-
-  int concatCount = concat_a->num_elem();
-  int concatBlockDim = 32;
-  int concatGridDim = (concatCount + ELEMENTS_PER_THREAD * concatBlockDim - 1) / (ELEMENTS_PER_THREAD * concatBlockDim);
-
-  int linearBlockDim1 = 32;
-  int linearGridDim11 = (HIDDEN_DIM + linearBlockDim1 - 1) / linearBlockDim1;
-  int linearGridDim12 = (M0 + linearBlockDim1 - 1) / linearBlockDim1;
-  dim3 grid2D0(linearGridDim11, linearGridDim12, BATCH_SIZE); // in, out, batch
-  dim3 block1D0(linearBlockDim1, linearBlockDim1);
-
-  int linearBlockDim2 = 32;
-  int linearGridDim21 = (M0 + linearBlockDim2 - 1) / linearBlockDim2;
-  int linearGridDim22 = (M1 + linearBlockDim2 - 1) / linearBlockDim2;
-  dim3 grid2D1(linearGridDim21, linearGridDim22, BATCH_SIZE); // in, out, batch
-  dim3 block1D1(linearBlockDim2, linearBlockDim2);
-
-  int linearBlockDim3 = 32;
-  int linearGridDim31 = (M1 + linearBlockDim3 - 1) / linearBlockDim3;
-  int linearGridDim32 = (M2 + linearBlockDim3 - 1) / linearBlockDim3;
-  dim3 grid2D2(linearGridDim31, linearGridDim32, BATCH_SIZE); // in, out, batch
-  dim3 block1D2(linearBlockDim3, linearBlockDim3);
-      
-  int linearBlockDim4 = 32;
-  int linearGridDim41 = (M2 + linearBlockDim4 - 1) / linearBlockDim4;
-  int linearGridDim42 = (M3 + linearBlockDim4 - 1) / linearBlockDim4;
-  dim3 grid2D3(linearGridDim41, linearGridDim42, BATCH_SIZE); // in, out, batch
-  dim3 block1D3(linearBlockDim4, linearBlockDim4);
-      
-
-  int reluCountLin1 = linear0_a->num_elem();
-  int reluBlockDimLin1 = 32;
-  int reluGridDimLin1 = (reluCountLin1 + reluBlockDimLin1 - 1) / reluBlockDimLin1;     
-  int reluCountLin2 = linear1_a->num_elem();
-  int reluBlockDimLin2 = 32;
-  int reluGridDimLin2 = (reluCountLin2 + reluBlockDimLin2 - 1) / reluBlockDimLin2;  
-  int reluCountLin3 = linear2_a->num_elem();
-  int reluBlockDimLin3 = 32;
-  int reluGridDimLin3 = (reluCountLin3 + reluBlockDimLin3 - 1) / reluBlockDimLin3;  
-
+  GridBlockDims dims = initializeGridAndBlockDimensions();
 
   // 퍼뜨린 값을 4개 device에 퍼뜨리지 않고 일단은
   // 배치사이즈 2개씩 한 번에 처리함 
@@ -368,46 +392,46 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       BATCH_SIZE * SEQ_LEN * sizeof(int), cudaMemcpyHostToDevice);
 
       // [B * 16] -> [B * 16 * 4096]
-      EmbeddingKernel<<<embeddingGridDim, embeddingBlockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+      EmbeddingKernel<<<dims.embeddingGridDim, dims.embeddingBlockDim>>>(gpu_mem_inputs, emb_wg, emb_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
       // [B * 16 * 4096] -> [B * 4096 * 16]
-      PermuteKernel<<<permuteGridDim, permuteBlockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
+      PermuteKernel<<<dims.permuteGridDim, dims.permuteBlockDim>>>(emb_ag, permute_ag, BATCH_SIZE, SEQ_LEN, HIDDEN_DIM);
       
       // [B * 4096 * 16] -> [B * 1024 * 14]
-      Conv1DKernelTiled<<<convGridDim0, convBlockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
-      ReLUKernel<<<reluGridDim1,reluBlockDim1>>>(conv0_ag, conv0_a->num_elem());
+      Conv1DKernelTiled<<<dims.convGridDim0, dims.convBlockDim>>>(permute_ag, conv0_wg, conv0_bg, conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
+      ReLUKernel<<<dims.reluGridDim1,dims.reluBlockDim1>>>(conv0_ag, conv0_a->num_elem());
       // [B * 1024 * 14] -> [B * 1024]
-      GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv0_ag, pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-2);
+      GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1>>>(conv0_ag, pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-2);
 
       // [B * 4096] -> [B * 1024 * 12]
-      Conv1DKernelTiled<<<convGridDim1, convBlockDim>>>(permute_ag, conv1_wg, conv1_bg, conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
-      ReLUKernel<<<reluGridDim2,reluBlockDim2>>>(conv1_ag, conv1_a->num_elem());
+      Conv1DKernelTiled<<<dims.convGridDim1, dims.convBlockDim>>>(permute_ag, conv1_wg, conv1_bg, conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
+      ReLUKernel<<<dims.reluGridDim2,dims.reluBlockDim2>>>(conv1_ag, conv1_a->num_elem());
       // [B * 1024 * 12] -> [B * 1024]
-      GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv1_ag, pool1_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-4);
+      GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1>>>(conv1_ag, pool1_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-4);
       // [B * 4096] -> [B * 1024 * 10]
-      Conv1DKernelTiled<<<convGridDim2, convBlockDim>>>(permute_ag, conv2_wg, conv2_bg, conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
-      ReLUKernel<<<reluGridDim3,reluBlockDim3>>>(conv2_ag, conv2_a->num_elem());
+      Conv1DKernelTiled<<<dims.convGridDim2, dims.convBlockDim>>>(permute_ag, conv2_wg, conv2_bg, conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
+      ReLUKernel<<<dims.reluGridDim3,dims.reluBlockDim3>>>(conv2_ag, conv2_a->num_elem());
       // [B * 1024 * 10] -> [B * 1024]
-      GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv2_ag, pool2_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-6);
+      GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1>>>(conv2_ag, pool2_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-6);
 
       // [B * 4096] -> [B * 1024 * 8]
-      Conv1DKernelTiled<<<convGridDim3, convBlockDim>>>(permute_ag, conv3_wg, conv3_bg, conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
-      ReLUKernel<<<reluGridDim4,reluBlockDim4>>>(conv3_ag, conv3_a->num_elem());
+      Conv1DKernelTiled<<<dims.convGridDim3, dims.convBlockDim>>>(permute_ag, conv3_wg, conv3_bg, conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
+      ReLUKernel<<<dims.reluGridDim4,dims.reluBlockDim4>>>(conv3_ag, conv3_a->num_elem());
       // [B * 1024 * 8] -> [B * 1024]
-      GetMaxKernel<<<getMaxGridDim1, getMaxBlockDim1>>>(conv3_ag, pool3_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-8);
+      GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1>>>(conv3_ag, pool3_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN-8);
 
       // [B * 1024 * 4] -> [B * 4096]
-      ConcatKernel<<<concatGridDim, concatBlockDim>>>(pool0_ag, pool1_ag, pool2_ag, pool3_ag, concat_ag, BATCH_SIZE, pool0_a->num_elem(), pool1_a->num_elem(),pool2_a->num_elem(),pool3_a->num_elem());
+      ConcatKernel<<<dims.concatGridDim, dims.concatBlockDim>>>(pool0_ag, pool1_ag, pool2_ag, pool3_ag, concat_ag, BATCH_SIZE, pool0_a->num_elem(), pool1_a->num_elem(),pool2_a->num_elem(),pool3_a->num_elem());
       // [B * 4096] -> [B * 2048]
-      LinearKernelTiled<<<grid2D0, block1D0>>>(concat_ag, linear0_wg, linear0_bg, linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
-      ReLUKernel<<<reluGridDimLin1, reluBlockDimLin1>>>(linear0_ag, linear0_a->num_elem());
+      LinearKernelTiled<<<dims.grid2D0, dims.block1D0>>>(concat_ag, linear0_wg, linear0_bg, linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+      ReLUKernel<<<dims.reluGridDimLin1, dims.reluBlockDimLin1>>>(linear0_ag, linear0_a->num_elem());
       // [B * 2048] -> [B * 1024]
-      LinearKernelTiled<<<grid2D1, block1D1>>>(linear0_ag, linear1_wg, linear1_bg, linear1_ag, BATCH_SIZE, M0, M1);
-      ReLUKernel<<<reluGridDimLin2, reluBlockDimLin2>>>(linear1_ag, linear1_a->num_elem());
+      LinearKernelTiled<<<dims.grid2D1, dims.block1D1>>>(linear0_ag, linear1_wg, linear1_bg, linear1_ag, BATCH_SIZE, M0, M1);
+      ReLUKernel<<<dims.reluGridDimLin2, dims.reluBlockDimLin2>>>(linear1_ag, linear1_a->num_elem());
       // [B * 1024] -> [B * 512]
-      LinearKernelTiled<<<grid2D2, block1D2>>>(linear1_ag, linear2_wg, linear2_bg, linear2_ag, BATCH_SIZE, M1, M2);
-      ReLUKernel<<<reluGridDimLin3, reluBlockDimLin3>>>(linear2_ag, linear2_a->num_elem());
+      LinearKernelTiled<<<dims.grid2D2, dims.block1D2>>>(linear1_ag, linear2_wg, linear2_bg, linear2_ag, BATCH_SIZE, M1, M2);
+      ReLUKernel<<<dims.reluGridDimLin3, dims.reluBlockDimLin3>>>(linear2_ag, linear2_a->num_elem());
       // [B * 512] -> [B * 2]
-      LinearKernelTiled<<<grid2D3, block1D3>>>(linear2_ag, linear3_wg, linear3_bg, linear3_ag, BATCH_SIZE, M2, M3);
+      LinearKernelTiled<<<dims.grid2D3, dims.block1D3>>>(linear2_ag, linear3_wg, linear3_bg, linear3_ag, BATCH_SIZE, M2, M3);
       cudaDeviceSynchronize();
 
       // cudaMemcpy(linear2_a->buf, linear2_ag,
