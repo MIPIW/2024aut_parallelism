@@ -272,7 +272,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
     exit(EXIT_FAILURE);
   }
 
-  int embeddingCount = SEQ_LEN * BATCH_SIZE; // 16 * 2 = 32
+  // int embeddingCount = SEQ_LEN * BATCH_SIZE; // 16 * 2 = 32
   int embeddingBlockDim = SEQ_LEN ; // sequence length
   int embeddingGridDim = BATCH_SIZE;
 
@@ -304,23 +304,29 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int concatBlockDim = 256;
   int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
 
-        /* in [1024 * 4] -> out [2048] */
   int linearBlockDim1 = 32;
-  int linearGridDim1 = (M0 + linearBlockDim1 - 1) / linearBlockDim1;
-  dim3 grid2D0(BATCH_SIZE, linearGridDim1);
-  dim3 block1D0(linearBlockDim1);
+  int linearGridDim11 = (HIDDEN_DIM + linearBlockDim1 - 1) / linearBlockDim1;
+  int linearGridDim12 = (M0 + linearBlockDim1 - 1) / linearBlockDim1;
+  dim3 grid2D0(linearGridDim11, linearGridDim12, BATCH_SIZE); // in, out, batch
+  dim3 block1D0(linearBlockDim1, linearBlockDim1);
+
   int linearBlockDim2 = 32;
-  int linearGridDim2 = (M1 + linearBlockDim2 - 1) / linearBlockDim2;
-  dim3 grid2D1(BATCH_SIZE, linearGridDim2);
-  dim3 block1D1(linearBlockDim2);
+  int linearGridDim21 = (M0 + linearBlockDim2 - 1) / linearBlockDim2;
+  int linearGridDim22 = (M1 + linearBlockDim2 - 1) / linearBlockDim2;
+  dim3 grid2D1(linearGridDim21, linearGridDim22, BATCH_SIZE); // in, out, batch
+  dim3 block1D1(linearBlockDim2, linearBlockDim2);
+
   int linearBlockDim3 = 32;
-  int linearGridDim3 = (M2 + linearBlockDim3 - 1) / linearBlockDim3;
-  dim3 grid2D2(BATCH_SIZE, linearGridDim3);
-  dim3 block1D2(linearBlockDim3);
+  int linearGridDim31 = (M1 + linearBlockDim3 - 1) / linearBlockDim3;
+  int linearGridDim32 = (M2 + linearBlockDim3 - 1) / linearBlockDim3;
+  dim3 grid2D2(linearGridDim31, linearGridDim32, BATCH_SIZE); // in, out, batch
+  dim3 block1D2(linearBlockDim3, linearBlockDim3);
+      
   int linearBlockDim4 = 32;
-  int linearGridDim4 = (M3 + linearBlockDim4 - 1) / linearBlockDim4;
-  dim3 grid2D3(BATCH_SIZE, linearGridDim4);
-  dim3 block1D3(linearBlockDim4);
+  int linearGridDim41 = (M2 + linearBlockDim4 - 1) / linearBlockDim4;
+  int linearGridDim42 = (M3 + linearBlockDim4 - 1) / linearBlockDim4;
+  dim3 grid2D3(linearGridDim41, linearGridDim42, BATCH_SIZE); // in, out, batch
+  dim3 block1D3(linearBlockDim4, linearBlockDim4);
       
 
   int reluCountLin1 = linear0_a->num_elem();
@@ -374,16 +380,16 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       // [B * 1024 * 4] -> [B * 4096]
       ConcatKernel<<<concatGridDim, concatBlockDim>>>(pool0_ag, pool1_ag, pool2_ag, pool3_ag, concat_ag, BATCH_SIZE, pool0_a->num_elem(), pool1_a->num_elem(),pool2_a->num_elem(),pool3_a->num_elem());
       // [B * 4096] -> [B * 2048]
-      LinearKernel<<<grid2D0, block1D0>>>(concat_ag, linear0_wg, linear0_bg, linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+      LinearKernelTiled<<<grid2D0, block1D0>>>(concat_ag, linear0_wg, linear0_bg, linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
       ReLUKernel<<<reluGridDimLin1, reluBlockDimLin1>>>(linear0_ag, linear0_a->num_elem());
       // [B * 2048] -> [B * 1024]
-      LinearKernel<<<grid2D1, block1D1>>>(linear0_ag, linear1_wg, linear1_bg, linear1_ag, BATCH_SIZE, M0, M1);
+      LinearKernelTiled<<<grid2D1, block1D1>>>(linear0_ag, linear1_wg, linear1_bg, linear1_ag, BATCH_SIZE, M0, M1);
       ReLUKernel<<<reluGridDimLin2, reluBlockDimLin2>>>(linear1_ag, linear1_a->num_elem());
       // [B * 1024] -> [B * 512]
-      LinearKernel<<<grid2D2, block1D2>>>(linear1_ag, linear2_wg, linear2_bg, linear2_ag, BATCH_SIZE, M1, M2);
+      LinearKernelTiled<<<grid2D2, block1D2>>>(linear1_ag, linear2_wg, linear2_bg, linear2_ag, BATCH_SIZE, M1, M2);
       ReLUKernel<<<reluGridDimLin3, reluBlockDimLin3>>>(linear2_ag, linear2_a->num_elem());
       // [B * 512] -> [B * 2]
-      LinearKernel<<<grid2D3, block1D3>>>(linear2_ag, linear3_wg, linear3_bg, linear3_ag, BATCH_SIZE, M2, M3);
+      LinearKernelTiled<<<grid2D3, block1D3>>>(linear2_ag, linear3_wg, linear3_bg, linear3_ag, BATCH_SIZE, M2, M3);
       cudaDeviceSynchronize();
 
       // cudaMemcpy(linear2_a->buf, linear2_ag,

@@ -28,3 +28,5 @@ __global__ void ConcatKernel(const float *in1, const float *in2, const float *in
                              float *out, size_t B, size_t N1, size_t N2, size_t N3, size_t N4);
 __global__ void LinearKernel(const float *in, const float *w, const float *bias, float *out,
                              size_t B, size_t N, size_t M);
+__global__ void LinearKernelTiled(const float *in, const float *w, const float *bias, float *out,
+                                  size_t B, size_t N, size_t M);

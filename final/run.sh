@@ -7,8 +7,8 @@
 # 		--oversubscribe -quiet \
 # 		./main $@
 
-TMPDIR=~/final salloc -N 4 --partition class1 --exclusive --gres=gpu:4   \
+salloc -N 4 --partition class1 --exclusive --gres=gpu:4   \
 	mpirun --bind-to none -mca btl ^openib -npernode 4 \
-		--oversubscribe -quiet nsys profile \
+		--oversubscribe -quiet \
 		./main $@
 

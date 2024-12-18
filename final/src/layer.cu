@@ -1,6 +1,8 @@
 ////변경가능
 
 #include "layer.h"
+#define BLOCK_SIZE 32  // Tile size for shared memory (tune for best performance)
+
 // #define TILE_SIZE 16
 // #define C_SIZE 16
 
@@ -470,6 +472,60 @@ __global__ void LinearKernel(const float *in, const float *w, const float *bias,
             val += w[m * N + j] * in[b * N + j];
         }
         // Add bias and store the result in the output tensor
+        out[b * M + m] = val + bias[m];
+    }
+}
+
+
+
+#define BLOCK_SIZE 32  // Tile size for shared memory (tune for best performance)
+
+__global__ void LinearKernelTiled(const float *in, const float *w, const float *bias, float *out,
+                                  size_t B, size_t N, size_t M) {
+    // Shared memory for storing tiles of input and weight matrices
+    __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
+
+    // Batch index (each block processes one batch element)
+    size_t b = blockIdx.z;
+
+    // Output feature index (m) and input feature index (n) for the current thread
+    size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+    size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+
+    // Accumulator for the dot product
+    float val = 0.0f;
+
+    // Loop over tiles of the input and weight matrices
+    for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
+        // Load a tile of the weight matrix into shared memory (if within bounds)
+        if (m < M && t * BLOCK_SIZE + threadIdx.x < N) {
+            tileW[threadIdx.y][threadIdx.x] = w[m * N + t * BLOCK_SIZE + threadIdx.x];
+        } else {
+            tileW[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        // Load a tile of the input matrix into shared memory (if within bounds)
+        if (n < N && t * BLOCK_SIZE + threadIdx.y < N) {
+            tileIn[threadIdx.y][threadIdx.x] = in[b * N + t * BLOCK_SIZE + threadIdx.y];
+        } else {
+            tileIn[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        // Synchronize to ensure all threads have loaded their tiles
+        __syncthreads();
+
+        // Compute partial dot product for the current tile
+        for (int k = 0; k < BLOCK_SIZE; k++) {
+            val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
+        }
+
+        // Synchronize before loading the next tile
+        __syncthreads();
+    }
+
+    // Write the result to the output tensor (if within bounds) and add bias
+    if (m < M && n < N) {
         out[b * M + m] = val + bias[m];
     }
 }
