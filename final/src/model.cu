@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <stdlib.h>
 #include <string.h>
-#define BATCH_SIZE 32 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
+#define BATCH_SIZE 2 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
 #define HIDDEN_DIM 4096
 #define INPUT_CHANNEL HIDDEN_DIM
 #define OUTPUT_CHANNEL 1024
@@ -300,6 +300,113 @@ void freeGPUContexts(GPUContext *contexts) {
     }
 }
 
+struct GridBlockDims {
+    int embeddingBlockDim;
+    int embeddingGridDim;
+    int permuteBlockDim;
+    int permuteGridDim;
+
+    dim3 convBlockDim;
+    dim3 convGridDim0;
+    dim3 convGridDim1;
+    dim3 convGridDim2;
+    dim3 convGridDim3;
+
+    int getMaxBlockDim1;
+    int getMaxGridDim1;
+
+    int reluBlockDim1;
+    int reluGridDim1;
+    int reluBlockDim2;
+    int reluGridDim2;
+    int reluBlockDim3;
+    int reluGridDim3;
+    int reluBlockDim4;
+    int reluGridDim4;
+
+    int concatBlockDim;
+    int concatGridDim;
+
+    dim3 grid2D0;
+    dim3 block1D0;
+    dim3 grid2D1;
+    dim3 block1D1;
+    dim3 grid2D2;
+    dim3 block1D2;
+    dim3 grid2D3;
+    dim3 block1D3;
+
+    int reluBlockDimLin1;
+    int reluGridDimLin1;
+    int reluBlockDimLin2;
+    int reluGridDimLin2;
+    int reluBlockDimLin3;
+    int reluGridDimLin3;
+};
+
+GridBlockDims initializeGridAndBlockDimensions() {
+    GridBlockDims dims;
+
+    // Embedding dimensions
+    dims.embeddingBlockDim = SEQ_LEN;
+    dims.embeddingGridDim = BATCH_SIZE;
+
+    // Permute dimensions
+    int permuteCount = BATCH_SIZE * SEQ_LEN * HIDDEN_DIM;
+    dims.permuteBlockDim = BLOCK_SIZE;
+    dims.permuteGridDim = (permuteCount + dims.permuteBlockDim - 1) / dims.permuteBlockDim;
+
+    // Convolution dimensions
+    dims.convBlockDim = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    dims.convGridDim0 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 3 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim1 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 5 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim2 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 7 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims.convGridDim3 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 9 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+    // Max pooling dimensions
+    dims.getMaxBlockDim1 = BLOCK_SIZE;
+    dims.getMaxGridDim1 = (BATCH_SIZE * OUTPUT_CHANNEL + dims.getMaxBlockDim1 - 1) / dims.getMaxBlockDim1;
+
+    // ReLU dimensions for convolutional layers
+    dims.reluBlockDim1 = BLOCK_SIZE;
+    dims.reluGridDim1 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 2) + dims.reluBlockDim1 - 1) / dims.reluBlockDim1;
+    dims.reluBlockDim2 = BLOCK_SIZE;
+    dims.reluGridDim2 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 4) + dims.reluBlockDim2 - 1) / dims.reluBlockDim2;
+    dims.reluBlockDim3 = BLOCK_SIZE;
+    dims.reluGridDim3 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 6) + dims.reluBlockDim3 - 1) / dims.reluBlockDim3;
+    dims.reluBlockDim4 = BLOCK_SIZE;
+    dims.reluGridDim4 = (BATCH_SIZE * OUTPUT_CHANNEL * (SEQ_LEN - 8) + dims.reluBlockDim4 - 1) / dims.reluBlockDim4;
+
+    // Concat dimensions
+    int concatCount = BATCH_SIZE * OUTPUT_CHANNEL * 4;
+    dims.concatBlockDim = BLOCK_SIZE;
+    dims.concatGridDim = (concatCount + ELEMENTS_PER_THREAD * dims.concatBlockDim - 1) / (ELEMENTS_PER_THREAD * dims.concatBlockDim);
+
+    // Linear dimensions
+    dims.grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE - 1) / BLOCK_SIZE, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D1 = dim3((M0 + BLOCK_SIZE - 1) / BLOCK_SIZE, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D1 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D2 = dim3((M1 + BLOCK_SIZE-1) / BLOCK_SIZE, (M2 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D2 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    dims.grid2D3 = dim3((M2 + BLOCK_SIZE-1) / BLOCK_SIZE, (M3 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims.block1D3 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+
+    // ReLU dimensions for linear layers
+    dims.reluBlockDimLin1 = BLOCK_SIZE;
+    dims.reluGridDimLin1 = (BATCH_SIZE * M0 + dims.reluBlockDimLin1 - 1) / dims.reluBlockDimLin1;
+
+    dims.reluBlockDimLin2 = BLOCK_SIZE;
+    dims.reluGridDimLin2 = (BATCH_SIZE * M1 + dims.reluBlockDimLin2 - 1) / dims.reluBlockDimLin2;
+
+    dims.reluBlockDimLin3 = BLOCK_SIZE;
+    dims.reluGridDimLin3 = (BATCH_SIZE * M2 + dims.reluBlockDimLin3 - 1) / dims.reluBlockDimLin3;
+
+    return dims;
+}
 
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
@@ -329,6 +436,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   GPUContext contexts[NUM_GPUS_PER_NODE];
   initGPUContexts(contexts);
 
+  GridBlockDims dims = initializeGridAndBlockDimensions();
 
   // int embeddingCount = SEQ_LEN * BATCH_SIZE; // 16 * 2 = 32
   int embeddingBlockDim = SEQ_LEN ; // sequence length
@@ -391,13 +499,13 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       
 
   int reluCountLin1 = linear0_a->num_elem();
-  int reluBlockDimLin1 = 256;
+  int reluBlockDimLin1 = 32;
   int reluGridDimLin1 = (reluCountLin1 + reluBlockDimLin1 - 1) / reluBlockDimLin1;     
   int reluCountLin2 = linear1_a->num_elem();
-  int reluBlockDimLin2 = 256;
+  int reluBlockDimLin2 = 32;
   int reluGridDimLin2 = (reluCountLin2 + reluBlockDimLin2 - 1) / reluBlockDimLin2;  
   int reluCountLin3 = linear2_a->num_elem();
-  int reluBlockDimLin3 = 128;
+  int reluBlockDimLin3 = 32;
   int reluGridDimLin3 = (reluCountLin3 + reluBlockDimLin3 - 1) / reluBlockDimLin3;  
 
 
