@@ -320,7 +320,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   // int concatGridDim = (concatCount + concatBlockDim - 1) / concatBlockDim; 
 
   int concatCount = concat_a->num_elem();
-  int concatBlockDim = 256;
+  int concatBlockDim = 32;
   int concatGridDim = (concatCount + ELEMENTS_PER_THREAD * concatBlockDim - 1) / (ELEMENTS_PER_THREAD * concatBlockDim);
 
   int linearBlockDim1 = 32;
@@ -349,13 +349,13 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       
 
   int reluCountLin1 = linear0_a->num_elem();
-  int reluBlockDimLin1 = 256;
+  int reluBlockDimLin1 = 32;
   int reluGridDimLin1 = (reluCountLin1 + reluBlockDimLin1 - 1) / reluBlockDimLin1;     
   int reluCountLin2 = linear1_a->num_elem();
-  int reluBlockDimLin2 = 256;
+  int reluBlockDimLin2 = 32;
   int reluGridDimLin2 = (reluCountLin2 + reluBlockDimLin2 - 1) / reluBlockDimLin2;  
   int reluCountLin3 = linear2_a->num_elem();
-  int reluBlockDimLin3 = 128;
+  int reluBlockDimLin3 = 32;
   int reluGridDimLin3 = (reluCountLin3 + reluBlockDimLin3 - 1) / reluBlockDimLin3;  
 
 
