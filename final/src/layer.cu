@@ -1,8 +1,16 @@
 ////변경가능
 
 #include "layer.h"
+#include <cuda_fp16.h>
+#include <mma.h>
+
 #define BLOCK_SIZE 32  // Tile size for shared memory (tune for best performance)
 #define ELEMENTS_PER_THREAD 4 // Number of elements each thread will process
+#define WMMA_M 16
+#define WMMA_N 16
+#define WMMA_K 16
+
+using namespace nvcuda;  // For WMMA (Warp Matrix Multiply-Accumulate)
 
 // #define TILE_SIZE 16
 // #define C_SIZE 16
@@ -791,63 +799,102 @@ __global__ void LinearKernelTiled(const float *in, const float *w, const float *
 }
 
 
-
 __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
-                                  size_t B, size_t N, size_t M) {
-    // Shared memory for storing tiles of input and weight matrices (double buffering)
-    __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float tileW[2][BLOCK_SIZE][BLOCK_SIZE];
+                                          size_t B, size_t N, size_t M) {
+    __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
 
-    // Batch index (each block processes one batch element)
+    // Batch index
     size_t b = blockIdx.z;
 
-    // Output feature index (m) and input feature index (n) for the current thread
+    // Output and input feature indices
     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
     size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 
-    // Accumulator for the dot product
+    // Accumulator for dot product
     float val = 0.0f;
 
-    // Double buffering index
-    int bufIdx = 0;
-
-    // Loop over tiles of the input and weight matrices
+    // Loop over tiles
     for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
-        // Load a tile of the weight matrix into shared memory (if within bounds)
-        if (m < M && t * BLOCK_SIZE + threadIdx.x < N) {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = w[m * N + t * BLOCK_SIZE + threadIdx.x];
-        } else {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
+        // Load input tile (coalesced read)
+        tileIn[threadIdx.y][threadIdx.x] = in[b * N + (t * BLOCK_SIZE + threadIdx.y)];
 
-        // Load a tile of the input matrix into shared memory (if within bounds)
-        if (n < N && t * BLOCK_SIZE + threadIdx.y < N) {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = in[b * N + t * BLOCK_SIZE + threadIdx.y];
-        } else {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
+    // Load weight tile (coalesced read)
+        tileW[threadIdx.y][threadIdx.x] = w[m * N + (t * BLOCK_SIZE + threadIdx.x)];
 
-        // Synchronize to ensure all threads have loaded their tiles
         __syncthreads();
 
-        // Compute partial dot product for the current tile
+        // Unroll the loop for better performance
+        #pragma unroll
         for (int k = 0; k < BLOCK_SIZE; k++) {
-            val += tileW[bufIdx][threadIdx.y][k] * tileIn[bufIdx][k][threadIdx.x];
+            val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
         }
 
-        // Synchronize before loading the next tile
         __syncthreads();
-
-        // Toggle the buffer index for double buffering
-        bufIdx = 1 - bufIdx;
     }
 
-    val += bias[m];
-    // Write the result to the output tensor (if within bounds) and add bias
+    // Apply ReLU and write the output (coalesced write)
     if (m < M && n < N) {
-        out[b * M + m] = val > 0? val : 0;
+        out[b * M + m] = fmaxf(val + bias[m], 0.0f);
     }
 }
+
+// __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
+//                                   size_t B, size_t N, size_t M) {
+//     // Shared memory for storing tiles of input and weight matrices (double buffering)
+//     __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
+//     __shared__ float tileW[2][BLOCK_SIZE][BLOCK_SIZE];
+
+//     // Batch index (each block processes one batch element)
+//     size_t b = blockIdx.z;
+
+//     // Output feature index (m) and input feature index (n) for the current thread
+//     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+//     size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+
+//     // Accumulator for the dot product
+//     float val = 0.0f;
+
+//     // Double buffering index
+//     int bufIdx = 0;
+
+//     // Loop over tiles of the input and weight matrices
+//     for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
+//         // Load a tile of the weight matrix into shared memory (if within bounds)
+//         if (m < M && t * BLOCK_SIZE + threadIdx.x < N) {
+//             tileW[bufIdx][threadIdx.y][threadIdx.x] = w[m * N + t * BLOCK_SIZE + threadIdx.x];
+//         } else {
+//             tileW[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
+//         }
+
+//         // Load a tile of the input matrix into shared memory (if within bounds)
+//         if (n < N && t * BLOCK_SIZE + threadIdx.y < N) {
+//             tileIn[bufIdx][threadIdx.y][threadIdx.x] = in[b * N + t * BLOCK_SIZE + threadIdx.y];
+//         } else {
+//             tileIn[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
+//         }
+
+//         // Synchronize to ensure all threads have loaded their tiles
+//         __syncthreads();
+
+//         // Compute partial dot product for the current tile
+//         for (int k = 0; k < BLOCK_SIZE; k++) {
+//             val += tileW[bufIdx][threadIdx.y][k] * tileIn[bufIdx][k][threadIdx.x];
+//         }
+
+//         // Synchronize before loading the next tile
+//         __syncthreads();
+
+//         // Toggle the buffer index for double buffering
+//         bufIdx = 1 - bufIdx;
+//     }
+
+//     val += bias[m];
+//     // Write the result to the output tensor (if within bounds) and add bias
+//     if (m < M && n < N) {
+//         out[b * M + m] = val > 0? val : 0;
+//     }
+// }
 
 __global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
                                   size_t B, size_t N, size_t M) {
@@ -905,3 +952,78 @@ __global__ void LinearKernelTiled2(const float *in, const float *w, const float 
     }
 }
 
+
+#define SCALE 1.0f  // Example scaling factor; tune this based on your data
+
+__global__ void TensorCoreLinearReluKernel(float *in, float *w, float *bias, float *out, size_t B, size_t N, size_t M) {
+    int batch = blockIdx.z;
+    int warpM = (blockIdx.y * blockDim.y + threadIdx.y) / 4;
+    int warpN = (blockIdx.x * blockDim.x + threadIdx.x) / 4;
+
+    if (warpM * WMMA_M >= M || warpN * WMMA_N >= N) return;
+
+    // Shared memory for storing converted half-precision tiles
+    __shared__ half in_half[WMMA_M * WMMA_K];
+    __shared__ half w_half[WMMA_K * WMMA_N];
+    __shared__ float bias_float[WMMA_N];
+
+    // Accumulator for FP32 precision
+    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> acc;
+    wmma::fill_fragment(acc, 0.0f);
+
+    // Convert bias to FP32
+    if (threadIdx.x < WMMA_N && threadIdx.y == 0) {
+        bias_float[threadIdx.x] = bias[warpN * WMMA_N + threadIdx.x];
+    }
+
+    __syncthreads();
+
+    // Loop over tiles of the input and weight matrices
+    for (int k = 0; k < (N + WMMA_K - 1) / WMMA_K; ++k) {
+        int input_idx = batch * N * WMMA_M + warpM * WMMA_M * N + k * WMMA_K;
+        int weight_idx = k * WMMA_K * M + warpN * WMMA_N;
+
+        if (input_idx < B * N * WMMA_M && weight_idx < N * M) {
+            // Convert a tile of the input to half-precision with scaling
+            for (int i = 0; i < WMMA_M; i++) {
+                for (int j = 0; j < WMMA_K; j++) {
+                    int idx = i * N + j;
+                    in_half[i * WMMA_K + j] = __float2half(in[input_idx + idx] * SCALE);
+                }
+            }
+
+            // Convert a tile of the weights to half-precision
+            for (int i = 0; i < WMMA_K; i++) {
+                for (int j = 0; j < WMMA_N; j++) {
+                    int idx = i * M + j;
+                    w_half[i * WMMA_N + j] = __float2half(w[weight_idx + idx] * SCALE);
+                }
+            }
+
+            __syncthreads();
+
+            // Load half-precision tiles into Tensor Core fragments
+            wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
+            wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> b_frag;
+
+            wmma::load_matrix_sync(a_frag, in_half, WMMA_K);
+            wmma::load_matrix_sync(b_frag, w_half, WMMA_N);
+
+            // Perform matrix multiplication using Tensor Cores
+            wmma::mma_sync(acc, a_frag, b_frag, acc);
+        }
+    }
+
+    // Add bias and apply ReLU with rescaling
+    for (int i = 0; i < acc.num_elements; ++i) {
+        float result = acc.x[i] / (SCALE * SCALE);
+        result += bias_float[i % WMMA_N];
+        acc.x[i] = result > 0 ? result : 0;  // ReLU
+    }
+
+    // Store the result in the output (FP32)
+    int output_idx = batch * M * WMMA_M + warpM * WMMA_M * M + warpN * WMMA_N;
+    if (output_idx < B * M * WMMA_M) {
+        wmma::store_matrix_sync(out + output_idx, acc, M, wmma::mem_row_major);
+    }
+}
