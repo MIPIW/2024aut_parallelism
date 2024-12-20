@@ -71,6 +71,7 @@ typedef struct {
     int permuteBlockDim, permuteGridDim;
 
     dim3 convBlockDim, convGridDim0, convGridDim1, convGridDim2, convGridDim3;
+    dim3 convBlockDim0, convGridDim00;
     int getMaxBlockDim1, getMaxGridDim1;
 
     int reluBlockDim1, reluGridDim1, reluBlockDim2, reluGridDim2;
@@ -111,7 +112,9 @@ void initializeGridAndBlockDimensions(GridBlockDims *dims) {
     dims->convBlockDim = dim3(BLOCK_SIZE, BLOCK_SIZE);
     dims->convGridDim0 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 3 + 1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-    // dims->convGridDim0 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 3 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims->convBlockDim0 = dim3(BLOCK_SIZE, 4);  // 32 threads for sequence position, 4 for output channels
+    dims->convGridDim00 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 4 - 1) / 4, (SEQ_LEN - 3 + 1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
     dims->convGridDim1 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 5 + BLOCK_SIZE - 1) / BLOCK_SIZE);
     dims->convGridDim2 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 7 + BLOCK_SIZE - 1) / BLOCK_SIZE);
     dims->convGridDim3 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 9 + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -140,19 +143,26 @@ void initializeGridAndBlockDimensions(GridBlockDims *dims) {
     // dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE - 1) / BLOCK_SIZE, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
     // dims->block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE);
 
-    dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, (M0 + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, BATCH_SIZE);
-    dims->block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE_TC/4);
+    // dims->grid2D1 = dim3((M0 + BLOCK_SIZE - 1) / BLOCK_SIZE, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    // dims->block1D1 = dim3(BLOCK_SIZE, BLOCK_SIZE);
 
-    dims->grid2D1 = dim3((M0 + BLOCK_SIZE - 1) / BLOCK_SIZE, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
-    dims->block1D1 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    // dims->grid2D2 = dim3((M1 + BLOCK_SIZE-1) / BLOCK_SIZE, (M2 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    // dims->block1D2 = dim3(BLOCK_SIZE, BLOCK_SIZE);
 
-    dims->grid2D2 = dim3((M1 + BLOCK_SIZE-1) / BLOCK_SIZE, (M2 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
-    dims->block1D2 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    // dims->grid2D3 = dim3((M2 + BLOCK_SIZE-1) / BLOCK_SIZE, (M3 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
+    // dims->block1D3 = dim3(BLOCK_SIZE, BLOCK_SIZE);
 
-    // dims->grid2D3 = dim3((M2 + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, (M3 + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, BATCH_SIZE);
-    // dims->block1D3 = dim3(BLOCK_SIZE, BLOCK_SIZE_TC/4);
-    dims->grid2D3 = dim3((M2 + BLOCK_SIZE-1) / BLOCK_SIZE, (M3 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
-    dims->block1D3 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    dims->grid2D0 = dim3(1, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
+    dims->block1D0 = dim3(BLOCK_SIZE/4, BLOCK_SIZE);
+
+    dims->grid2D1 = dim3(1, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims->block1D1 = dim3(BLOCK_SIZE/4, BLOCK_SIZE);
+
+    dims->grid2D2 = dim3(1, (M2 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
+    dims->block1D2 = dim3(BLOCK_SIZE/4, BLOCK_SIZE);
+
+    dims->grid2D3 = dim3(1, (M3 + BLOCK_SIZE - 1)/BLOCK_SIZE, BATCH_SIZE);
+    dims->block1D3 = dim3(BLOCK_SIZE/4, BLOCK_SIZE);
 
     // ReLU dimensions for linear layers
     dims->reluBlockDimLin1 = BLOCK_SIZE;
@@ -513,6 +523,8 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
         // Conv1DReLUAndMaxPoolKernel<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, contexts[gpu_id].pool0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3, SEQ_LEN-2);
         
+        // Conv1DKernelTiled3<<<dims.convGridDim00, dims.convBlockDim0, 0, contexts[gpu_id].stream[0]>>>(
+        //     contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
         Conv1DKernelTiled<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream[0]>>>(
             contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
         // ReLUKernel<<<dims.reluGridDim1, dims.reluBlockDim1, 0, contexts[gpu_id].stream[0]>>>(
@@ -557,10 +569,10 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
             contexts[gpu_id].concat_ag, BATCH_SIZE, pool3_a->num_elem() / BATCH_SIZE);
 
         // Linear layers 1
-        // LinearKernelTiledWithRelu<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
-        //     contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
-        TensorCoreLinearReluKernel<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
-          contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+        LinearKernelTiledWithRelu<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
+            contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+        // TensorCoreLinearReluKernel<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
+        //   contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
         
         // ReLUKernel<<<dims.reluGridDimLin1, dims.reluBlockDimLin1, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].linear0_ag, linear0_a->num_elem());

@@ -12,58 +12,6 @@
 
 using namespace nvcuda;  // For WMMA (Warp Matrix Multiply-Accumulate)
 
-// #define TILE_SIZE 16
-// #define C_SIZE 16
-
-// __global__ void matmul_kernel(float* A, float* B, float* C, int M, int N, int K) {
-//     // Compute work-item's global row and column
-//     const int locRow = threadIdx.y;
-//     const int locCol = threadIdx.x;
-
-//     const int glbRow = blockIdx.y * blockDim.y + threadIdx.y;
-//     const int glbCol = blockIdx.x * blockDim.x + threadIdx.x;
-    
-//     const int locBSRow = blockDim.y;
-//     const int glbWSRow = gridDim.y * blockDim.y;
-
-//     __shared__ float Asub[TILE_SIZE][TILE_SIZE];
-//     __shared__ float Bsub[TILE_SIZE][TILE_SIZE];
-
-//     float temp[C_SIZE];
-//     for (int j = 0; j < C_SIZE; ++j) {
-//         temp[j] = 0.0;
-//     }
-    
-//     const int NUM_TILES = (K + TILE_SIZE - 1) / TILE_SIZE;
-
-//     for (int t = 0; t < NUM_TILES; ++t) {
-//         for (int j = 0; j < C_SIZE; ++j) { // example이 항상 2의 제곱수이니까 패딩을 넣을 필요 없음. 
-//           Asub[locRow + j * locBSRow][locCol] = A[(glbRow + j * glbWSRow) * K + (TILE_SIZE * t + locCol)];
-//         }
-
-//         for (int k = 0; k < TILE_SIZE; ++k) {
-//           Bsub[k][locCol] = B[(TILE_SIZE * t + k) * N + glbCol];
-//         }
-        
-//         __syncthreads();
-
-//         for (int k = 0; k < TILE_SIZE; ++k) {
-//             for (int j = 0; j < C_SIZE; ++j) {
-//                 int locIdxRowA = locRow + j * locBSRow;
-//                 temp[j] += Asub[locIdxRowA][k] * Bsub[k][locCol];
-//             }
-//         }
-//         __syncthreads();
-//     }
-
-//     for (int j = 0; j < C_SIZE; ++j) {
-//         int glbIdxRow = glbRow + j * glbWSRow;
-
-//         if (glbIdxRow < M && glbCol < N) {
-//             C[glbIdxRow * N + glbCol] = temp[j];
-//         }
-//     }
-// }
 
 /* Embedding
  * @param [in1]  in: [b, s]
@@ -335,6 +283,58 @@ __global__ void Conv1DKernelTiled(
     val += bias[oc];
     // Add bias and store the result in the output tensor
     out[b * (OC * os) + oc * os + j] = val > 0? val : 0;
+}
+
+
+
+
+__global__ void Conv1DKernelTiled3(
+    const float *in, const float *w, const float *bias, float *out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) {
+    
+    // Output sequence length
+    size_t os = s - K + 1;
+
+    // Batch index (each block processes one batch element)
+    size_t b = blockIdx.x;
+
+    // Output channel index
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Sequence position index (with tiling applied)
+    size_t j_start = blockIdx.z * BLOCK_SIZE;
+    size_t j_local = threadIdx.x;
+    size_t j = j_start + j_local;
+
+    // Ensure within bounds
+    if (b >= B || oc >= OC || j >= os) return;
+
+    // Shared memory for input tile
+    __shared__ float in_tile[BLOCK_SIZE + 3-1];  // BLOCK_SIZE + K - 1 (to handle boundary cases)
+    
+    // Accumulator for the convolution result
+    float val = 0.0f;
+
+    // Load the necessary input data into shared memory
+    for (size_t c = 0; c < C; ++c) {
+        // Load input data into shared memory
+        if (j + threadIdx.x < s) {
+            in_tile[threadIdx.x] = in[b * (C * s) + c * s + j + threadIdx.x];
+        }
+        __syncthreads();  // Ensure all threads have loaded their data
+
+        // Perform the convolution for this output channel, sequence position, and batch
+        for (size_t k = 0; k < K; ++k) {
+            if (j + k < os) {
+                val += in_tile[j_local + k] * w[oc * (C * K) + c * K + k];
+            }
+        }
+        __syncthreads();  // Synchronize before loading the next channel
+    }
+
+    val += bias[oc];
+    // Apply ReLU activation and store the result in the output tensor
+    out[b * (OC * os) + oc * os + j] = val > 0 ? val : 0;
 }
 
 
@@ -799,47 +799,194 @@ __global__ void LinearKernelTiled(const float *in, const float *w, const float *
 }
 
 
-__global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
-                                          size_t B, size_t N, size_t M) {
-    __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
+// __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
+//                                           size_t B, size_t N, size_t M) {
+//     __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
+//     __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
 
-    // Batch index
+//     // Batch index
+//     size_t b = blockIdx.z;
+
+//     // Output and input feature indices
+//     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+//     size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+
+//     // Accumulator for dot product
+//     float val = 0.0f;
+
+//     // Loop over tiles
+//     for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
+//         // Load input tile (coalesced read)
+//         tileIn[threadIdx.y][threadIdx.x] = in[b * N + (t * BLOCK_SIZE + threadIdx.y)];
+
+//     // Load weight tile (coalesced read)
+//         tileW[threadIdx.y][threadIdx.x] = w[m * N + (t * BLOCK_SIZE + threadIdx.x)];
+
+//         __syncthreads();
+
+//         // Unroll the loop for better performance
+//         #pragma unroll
+//         for (int k = 0; k < BLOCK_SIZE; k++) {
+//             val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
+//         }
+
+//         __syncthreads();
+//     }
+
+//     // Apply ReLU and write the output (coalesced write)
+//     if (m < M && n < N) {
+//         out[b * M + m] = fmaxf(val + bias[m], 0.0f);
+//     }
+// }
+
+__global__ void LinearKernelTiledWithRelu(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M) 
+{
+    // Each block processes one batch element (z-dimension)
     size_t b = blockIdx.z;
 
-    // Output and input feature indices
+    // m: output feature index
     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
-    size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 
-    // Accumulator for dot product
+    // We only have one block in x-dim, since we loop over N tiles inside the kernel
+    // threadIdx.x indexes a chunk of 4 floats along N dimension
+    // nBase is the starting N index for this thread in float terms
+    size_t nBase = threadIdx.x * 4;
+
+    // Shared memory for tiles
+    __shared__ float4 tileIn[2][BLOCK_SIZE][BLOCK_SIZE/4]; 
+    __shared__ float4 tileW[2][BLOCK_SIZE][BLOCK_SIZE/4];
+
     float val = 0.0f;
+    int bufIdx = 0;
 
-    // Loop over tiles
-    for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
-        // Load input tile (coalesced read)
-        tileIn[threadIdx.y][threadIdx.x] = in[b * N + (t * BLOCK_SIZE + threadIdx.y)];
+    // Number of N-tiles
+    size_t numTiles = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    // Load weight tile (coalesced read)
-        tileW[threadIdx.y][threadIdx.x] = w[m * N + (t * BLOCK_SIZE + threadIdx.x)];
+    for (size_t t = 0; t < numTiles; t++) {
+        // Compute the N offset for this tile
+        size_t nOffset = t * BLOCK_SIZE;
+        
+        // Load W tile:
+        float4 wVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        size_t wN = nOffset + nBase; // wN is the global N index for w
+        if (m < M && (wN + 3) < N) {
+            wVal = *(const float4*)(&w[m * N + wN]);
+        }
+        tileW[bufIdx][threadIdx.y][threadIdx.x] = wVal;
+
+        // Load In tile:
+        // For 'in', we don't have M dimension. We just have B and N.
+        // Each thread will load one float4 from the input vector for the given batch element `b`.
+        float4 iVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        if (b < B && (wN + 3) < N) {
+            iVal = *(const float4*)(&in[b * N + wN]);
+        }
+
+        // Since in doesn't depend on m, but we have a tile shaped [BLOCK_SIZE][BLOCK_SIZE/4],
+        // we just replicate the same iVal for each threadIdx.y. This is redundant but simple.
+        tileIn[bufIdx][threadIdx.y][threadIdx.x] = iVal;
 
         __syncthreads();
 
-        // Unroll the loop for better performance
-        #pragma unroll
-        for (int k = 0; k < BLOCK_SIZE; k++) {
-            val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
+        // Dot product over the N chunk:
+        // We have BLOCK_SIZE floats in N dimension, grouped in float4, so BLOCK_SIZE/4 chunks.
+        for (int k = 0; k < BLOCK_SIZE/4; k++) {
+            float4 wVec = tileW[bufIdx][threadIdx.y][k];
+            float4 iVec = tileIn[bufIdx][threadIdx.y][k];
+            val += wVec.x * iVec.x + wVec.y * iVec.y + wVec.z * iVec.z + wVec.w * iVec.w;
         }
 
         __syncthreads();
+        bufIdx = 1 - bufIdx;
     }
 
-    // Apply ReLU and write the output (coalesced write)
-    if (m < M && n < N) {
-        out[b * M + m] = fmaxf(val + bias[m], 0.0f);
+    // Write the result if in range
+    // Only threadIdx.x == 0 corresponds to writing the result since we accumulate over all N 
+    if (b < B && m < M && threadIdx.x == 0) {
+        out[b * M + m] = val + bias[m] > 0? val + bias[m]: 0;
     }
 }
 
-// __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
+
+__global__ void LinearKernelTiled2(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M) 
+{
+    // Each block processes one batch element (z-dimension)
+    size_t b = blockIdx.z;
+
+    // m: output feature index
+    size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+
+    // We only have one block in x-dim, since we loop over N tiles inside the kernel
+    // threadIdx.x indexes a chunk of 4 floats along N dimension
+    // nBase is the starting N index for this thread in float terms
+    size_t nBase = threadIdx.x * 4;
+
+    // Shared memory for tiles
+    __shared__ float4 tileIn[2][BLOCK_SIZE][BLOCK_SIZE/4]; 
+    __shared__ float4 tileW[2][BLOCK_SIZE][BLOCK_SIZE/4];
+
+    float val = 0.0f;
+    int bufIdx = 0;
+
+    // Number of N-tiles
+    size_t numTiles = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    for (size_t t = 0; t < numTiles; t++) {
+        // Compute the N offset for this tile
+        size_t nOffset = t * BLOCK_SIZE;
+        
+        // Load W tile:
+        float4 wVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        size_t wN = nOffset + nBase; // wN is the global N index for w
+        if (m < M && (wN + 3) < N) {
+            wVal = *(const float4*)(&w[m * N + wN]);
+        }
+        tileW[bufIdx][threadIdx.y][threadIdx.x] = wVal;
+
+        // Load In tile:
+        // For 'in', we don't have M dimension. We just have B and N.
+        // Each thread will load one float4 from the input vector for the given batch element `b`.
+        float4 iVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        if (b < B && (wN + 3) < N) {
+            iVal = *(const float4*)(&in[b * N + wN]);
+        }
+
+        // Since in doesn't depend on m, but we have a tile shaped [BLOCK_SIZE][BLOCK_SIZE/4],
+        // we just replicate the same iVal for each threadIdx.y. This is redundant but simple.
+        tileIn[bufIdx][threadIdx.y][threadIdx.x] = iVal;
+
+        __syncthreads();
+
+        // Dot product over the N chunk:
+        // We have BLOCK_SIZE floats in N dimension, grouped in float4, so BLOCK_SIZE/4 chunks.
+        for (int k = 0; k < BLOCK_SIZE/4; k++) {
+            float4 wVec = tileW[bufIdx][threadIdx.y][k];
+            float4 iVec = tileIn[bufIdx][threadIdx.y][k];
+            val += wVec.x * iVec.x + wVec.y * iVec.y + wVec.z * iVec.z + wVec.w * iVec.w;
+        }
+
+        __syncthreads();
+        bufIdx = 1 - bufIdx;
+    }
+
+    // Write the result if in range
+    // Only threadIdx.x == 0 corresponds to writing the result since we accumulate over all N 
+    if (b < B && m < M && threadIdx.x == 0) {
+        out[b * M + m] = val + bias[m];
+    }
+}
+
+
+
+// __global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
 //                                   size_t B, size_t N, size_t M) {
 //     // Shared memory for storing tiles of input and weight matrices (double buffering)
 //     __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
@@ -889,68 +1036,11 @@ __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const
 //         bufIdx = 1 - bufIdx;
 //     }
 
-//     val += bias[m];
 //     // Write the result to the output tensor (if within bounds) and add bias
 //     if (m < M && n < N) {
-//         out[b * M + m] = val > 0? val : 0;
+//         out[b * M + m] = val + bias[m];
 //     }
 // }
-
-__global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
-                                  size_t B, size_t N, size_t M) {
-    // Shared memory for storing tiles of input and weight matrices (double buffering)
-    __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float tileW[2][BLOCK_SIZE][BLOCK_SIZE];
-
-    // Batch index (each block processes one batch element)
-    size_t b = blockIdx.z;
-
-    // Output feature index (m) and input feature index (n) for the current thread
-    size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
-    size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-
-    // Accumulator for the dot product
-    float val = 0.0f;
-
-    // Double buffering index
-    int bufIdx = 0;
-
-    // Loop over tiles of the input and weight matrices
-    for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
-        // Load a tile of the weight matrix into shared memory (if within bounds)
-        if (m < M && t * BLOCK_SIZE + threadIdx.x < N) {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = w[m * N + t * BLOCK_SIZE + threadIdx.x];
-        } else {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        // Load a tile of the input matrix into shared memory (if within bounds)
-        if (n < N && t * BLOCK_SIZE + threadIdx.y < N) {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = in[b * N + t * BLOCK_SIZE + threadIdx.y];
-        } else {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        // Synchronize to ensure all threads have loaded their tiles
-        __syncthreads();
-
-        // Compute partial dot product for the current tile
-        for (int k = 0; k < BLOCK_SIZE; k++) {
-            val += tileW[bufIdx][threadIdx.y][k] * tileIn[bufIdx][k][threadIdx.x];
-        }
-
-        // Synchronize before loading the next tile
-        __syncthreads();
-
-        // Toggle the buffer index for double buffering
-        bufIdx = 1 - bufIdx;
-    }
-
-    // Write the result to the output tensor (if within bounds) and add bias
-    if (m < M && n < N) {
-        out[b * M + m] = val + bias[m];
-    }
-}
 
 
 #define SCALE 1.0f  // Example scaling factor; tune this based on your data

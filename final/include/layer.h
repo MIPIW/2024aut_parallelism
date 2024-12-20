@@ -37,14 +37,23 @@ __global__ void ReLUKernel(float *inout, size_t N);
 __global__ void ReLUKernelVectorized(float *inout, size_t N);
 __global__ void ConcatKernel(const float *in1, const float *in2, const float *in3, const float *in4,
                              float *out, size_t B, size_t N1, size_t N2, size_t N3, size_t N4);
+__global__ void Conv1DKernelTiled3(
+    const float *in, const float *w, const float *bias, float *out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K);
 __global__ void ConcatKernelOneN(const float *in1, const float *in2, const float *in3, const float *in4,
                              float *out, size_t B, size_t N);
 __global__ void LinearKernel(const float *in, const float *w, const float *bias, float *out,
                              size_t B, size_t N, size_t M);
 __global__ void LinearKernelTiled(const float *in, const float *w, const float *bias, float *out,
                                   size_t B, size_t N, size_t M);
-__global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
-                                  size_t B, size_t N, size_t M);
-__global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
-                            size_t B, size_t N, size_t M);                             
+__global__ void LinearKernelTiledWithRelu(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M);
+__global__ void LinearKernelTiled2(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M) ;                             
 __global__ void TensorCoreLinearReluKernel(float *in, float *w, float *bias, float *out, size_t B, size_t N, size_t M);
