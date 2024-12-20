@@ -137,11 +137,11 @@ void initializeGridAndBlockDimensions(GridBlockDims *dims) {
 
     // Linear dimensions
     
-    dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE - 1) / BLOCK_SIZE, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
-    dims->block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE);
+    // dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE - 1) / BLOCK_SIZE, (M0 + BLOCK_SIZE -1) / BLOCK_SIZE, BATCH_SIZE);
+    // dims->block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE);
 
-    // dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, (M0 + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, BATCH_SIZE);
-    // dims->block1D0 = dim3(BLOCK_SIZE_TC, BLOCK_SIZE_TC/4);
+    dims->grid2D0 = dim3((HIDDEN_DIM + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, (M0 + BLOCK_SIZE_TC-1) / BLOCK_SIZE_TC, BATCH_SIZE);
+    dims->block1D0 = dim3(BLOCK_SIZE, BLOCK_SIZE_TC/4);
 
     dims->grid2D1 = dim3((M0 + BLOCK_SIZE - 1) / BLOCK_SIZE, (M1 + BLOCK_SIZE-1) / BLOCK_SIZE, BATCH_SIZE);
     dims->block1D1 = dim3(BLOCK_SIZE, BLOCK_SIZE);
@@ -557,10 +557,10 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
             contexts[gpu_id].concat_ag, BATCH_SIZE, pool3_a->num_elem() / BATCH_SIZE);
 
         // Linear layers 1
-        LinearKernelTiledWithRelu<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
-            contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
-        // TensorCoreLinearReluKernel<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
-        //   contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+        // LinearKernelTiledWithRelu<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
+        //     contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
+        TensorCoreLinearReluKernel<<<dims.grid2D0, dims.block1D0, 0, contexts[gpu_id].stream[0]>>>(
+          contexts[gpu_id].concat_ag, contexts[gpu_id].linear0_wg, contexts[gpu_id].linear0_bg, contexts[gpu_id].linear0_ag, BATCH_SIZE, HIDDEN_DIM, M0);
         
         // ReLUKernel<<<dims.reluGridDimLin1, dims.reluBlockDimLin1, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].linear0_ag, linear0_a->num_elem());
