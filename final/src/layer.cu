@@ -10,60 +10,9 @@
 #define WMMA_N 16
 #define WMMA_K 16
 
+using namespace nvcuda::wmma;  // For WMMA (Warp Matrix Multiply-Accumulate)
 using namespace nvcuda;  // For WMMA (Warp Matrix Multiply-Accumulate)
 
-// #define TILE_SIZE 16
-// #define C_SIZE 16
-
-// __global__ void matmul_kernel(float* A, float* B, float* C, int M, int N, int K) {
-//     // Compute work-item's global row and column
-//     const int locRow = threadIdx.y;
-//     const int locCol = threadIdx.x;
-
-//     const int glbRow = blockIdx.y * blockDim.y + threadIdx.y;
-//     const int glbCol = blockIdx.x * blockDim.x + threadIdx.x;
-    
-//     const int locBSRow = blockDim.y;
-//     const int glbWSRow = gridDim.y * blockDim.y;
-
-//     __shared__ float Asub[TILE_SIZE][TILE_SIZE];
-//     __shared__ float Bsub[TILE_SIZE][TILE_SIZE];
-
-//     float temp[C_SIZE];
-//     for (int j = 0; j < C_SIZE; ++j) {
-//         temp[j] = 0.0;
-//     }
-    
-//     const int NUM_TILES = (K + TILE_SIZE - 1) / TILE_SIZE;
-
-//     for (int t = 0; t < NUM_TILES; ++t) {
-//         for (int j = 0; j < C_SIZE; ++j) { // example이 항상 2의 제곱수이니까 패딩을 넣을 필요 없음. 
-//           Asub[locRow + j * locBSRow][locCol] = A[(glbRow + j * glbWSRow) * K + (TILE_SIZE * t + locCol)];
-//         }
-
-//         for (int k = 0; k < TILE_SIZE; ++k) {
-//           Bsub[k][locCol] = B[(TILE_SIZE * t + k) * N + glbCol];
-//         }
-        
-//         __syncthreads();
-
-//         for (int k = 0; k < TILE_SIZE; ++k) {
-//             for (int j = 0; j < C_SIZE; ++j) {
-//                 int locIdxRowA = locRow + j * locBSRow;
-//                 temp[j] += Asub[locIdxRowA][k] * Bsub[k][locCol];
-//             }
-//         }
-//         __syncthreads();
-//     }
-
-//     for (int j = 0; j < C_SIZE; ++j) {
-//         int glbIdxRow = glbRow + j * glbWSRow;
-
-//         if (glbIdxRow < M && glbCol < N) {
-//             C[glbIdxRow * N + glbCol] = temp[j];
-//         }
-//     }
-// }
 
 /* Embedding
  * @param [in1]  in: [b, s]
@@ -336,6 +285,496 @@ __global__ void Conv1DKernelTiled(
     // Add bias and store the result in the output tensor
     out[b * (OC * os) + oc * os + j] = val > 0? val : 0;
 }
+
+
+// Assume block size along x is fixed to 32 for the output sequence dimension.
+
+// This kernel uses shared memory tiling and float4 loads.
+// Grid dimensions:
+//   gridDim.x = B
+//   gridDim.y = number of output channel blocks (ceil(OC / OC_per_block))
+//   gridDim.z = number of sequence tiles (ceil((s - K + 1) / BLOCK_SIZE))
+//
+// blockDim = (BLOCK_SIZE, maybe an OC_per_block if multi-dimensional in Y, 1)
+//
+// For simplicity, we consider a single output channel per block in Y dimension below.
+// Modify as needed if you want multiple output channels per block.
+
+
+#define TILE_C 128      // Number of input channels processed per tile
+#define TILE_OC 8       // Number of output channels processed per tile
+#define TILE_J 32 
+#define KERNEL_SIZE 3   // K (given as 5)
+// #define THREADS_X 32    // Threads in x-dim
+// #define THREADS_Y 4     // Threads in y-dim, total 128 threads/block
+
+
+__global__ void Conv1DKernelTiled3(
+    const float * in,
+    const float * __restrict__ w,
+    const float * __restrict__ bias,
+    float * __restrict__ out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) 
+{
+    // Output sequence length
+    size_t os = s - K + 1;
+
+    // Identify current batch index
+    size_t b = blockIdx.x;
+    // Output channel index
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+    // Sequence position index
+    size_t j = blockIdx.z * blockDim.x + threadIdx.x;
+
+    // Bounds check
+    if (b >= B || oc >= OC || j >= os) return;
+
+    // Accumulator
+    float val = 0.0f;
+
+    // Unroll K since K=3.
+    // We'll process C in chunks of 4.
+    // We'll process C in chunks of 4.
+    for (size_t c4 = 0; c4 < C; c4 += 4) {
+        // Instead of float4 vector loads, we do scalar loads for each element.
+        // Pre-load the input values for k=0, k=1, and k=2 for these 4 channels.
+
+        float x_k0[4], x_k1[4], x_k2[4];
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                x_k0[idx] = in[b * (C * s) + c_index * s + (j + 0)];
+                x_k1[idx] = in[b * (C * s) + c_index * s + (j + 1)];
+                x_k2[idx] = in[b * (C * s) + c_index * s + (j + 2)];
+            } else {
+                // If c_index is out of range, set to 0.0f
+                x_k0[idx] = 0.0f;
+                x_k1[idx] = 0.0f;
+                x_k2[idx] = 0.0f;
+            }
+        }
+
+        // Now perform the accumulation with the corresponding weights
+        #pragma unroll
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                // Load weights for each k
+                float w_k0 = w[oc * (C * K) + c_index * K + 0];
+                float w_k1 = w[oc * (C * K) + c_index * K + 1];
+                float w_k2 = w[oc * (C * K) + c_index * K + 2];
+
+                float val_k0 = x_k0[idx];
+                float val_k1 = x_k1[idx];
+                float val_k2 = x_k2[idx];
+
+                val += val_k0 * w_k0 + val_k1 * w_k1 + val_k2 * w_k2;
+            }
+        }
+    }
+
+    // Add bias and apply ReLU
+    val += bias[oc];
+    val = val > 0.0f ? val : 0.0f;
+
+    // Store the result
+    out[b * (OC * os) + oc * os + j] = val;
+
+}
+
+
+__global__ void Conv1DKernelTiled5(
+    const float *in,
+    const float * __restrict__ w,
+    const float * __restrict__ bias,
+    float * __restrict__ out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) 
+{
+    // Output sequence length
+    size_t os = s - K + 1; // K=5 -> os = s - 4
+
+    size_t b = blockIdx.x;
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+    size_t j = blockIdx.z * blockDim.x + threadIdx.x;
+
+    if (b >= B || oc >= OC || j >= os) return;
+
+    float val = 0.0f;
+
+    // Process C in chunks of 4
+    for (size_t c4 = 0; c4 < C; c4 += 4) {
+        float x_k0[4], x_k1[4], x_k2[4], x_k3[4], x_k4[4];
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                x_k0[idx] = in[b * (C * s) + c_index * s + (j + 0)];
+                x_k1[idx] = in[b * (C * s) + c_index * s + (j + 1)];
+                x_k2[idx] = in[b * (C * s) + c_index * s + (j + 2)];
+                x_k3[idx] = in[b * (C * s) + c_index * s + (j + 3)];
+                x_k4[idx] = in[b * (C * s) + c_index * s + (j + 4)];
+            } else {
+                x_k0[idx] = 0.0f;
+                x_k1[idx] = 0.0f;
+                x_k2[idx] = 0.0f;
+                x_k3[idx] = 0.0f;
+                x_k4[idx] = 0.0f;
+            }
+        }
+
+        #pragma unroll
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                float w_k0 = w[oc * (C * K) + c_index * K + 0];
+                float w_k1 = w[oc * (C * K) + c_index * K + 1];
+                float w_k2 = w[oc * (C * K) + c_index * K + 2];
+                float w_k3 = w[oc * (C * K) + c_index * K + 3];
+                float w_k4 = w[oc * (C * K) + c_index * K + 4];
+
+                val += x_k0[idx] * w_k0
+                     + x_k1[idx] * w_k1
+                     + x_k2[idx] * w_k2
+                     + x_k3[idx] * w_k3
+                     + x_k4[idx] * w_k4;
+            }
+        }
+    }
+
+    val += bias[oc];
+    val = val > 0.0f ? val : 0.0f;
+
+    out[b * (OC * os) + oc * os + j] = val;
+}
+
+__global__ void Conv1DKernelTiled7(
+    const float *in,
+    const float * __restrict__ w,
+    const float * __restrict__ bias,
+    float * __restrict__ out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) 
+{
+    // Output sequence length
+    size_t os = s - K + 1; // K=7 -> os = s - 6
+
+    size_t b = blockIdx.x;
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+    size_t j = blockIdx.z * blockDim.x + threadIdx.x;
+
+    if (b >= B || oc >= OC || j >= os) return;
+
+    float val = 0.0f;
+
+    // Process C in chunks of 4
+    for (size_t c4 = 0; c4 < C; c4 += 4) {
+        float x_k0[4], x_k1[4], x_k2[4], x_k3[4], x_k4[4], x_k5[4], x_k6[4];
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                x_k0[idx] = in[b * (C * s) + c_index * s + (j + 0)];
+                x_k1[idx] = in[b * (C * s) + c_index * s + (j + 1)];
+                x_k2[idx] = in[b * (C * s) + c_index * s + (j + 2)];
+                x_k3[idx] = in[b * (C * s) + c_index * s + (j + 3)];
+                x_k4[idx] = in[b * (C * s) + c_index * s + (j + 4)];
+                x_k5[idx] = in[b * (C * s) + c_index * s + (j + 5)];
+                x_k6[idx] = in[b * (C * s) + c_index * s + (j + 6)];
+            } else {
+                x_k0[idx] = 0.0f;
+                x_k1[idx] = 0.0f;
+                x_k2[idx] = 0.0f;
+                x_k3[idx] = 0.0f;
+                x_k4[idx] = 0.0f;
+                x_k5[idx] = 0.0f;
+                x_k6[idx] = 0.0f;
+            }
+        }
+
+        #pragma unroll
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                float w_k0 = w[oc * (C * K) + c_index * K + 0];
+                float w_k1 = w[oc * (C * K) + c_index * K + 1];
+                float w_k2 = w[oc * (C * K) + c_index * K + 2];
+                float w_k3 = w[oc * (C * K) + c_index * K + 3];
+                float w_k4 = w[oc * (C * K) + c_index * K + 4];
+                float w_k5 = w[oc * (C * K) + c_index * K + 5];
+                float w_k6 = w[oc * (C * K) + c_index * K + 6];
+
+                val += x_k0[idx] * w_k0
+                     + x_k1[idx] * w_k1
+                     + x_k2[idx] * w_k2
+                     + x_k3[idx] * w_k3
+                     + x_k4[idx] * w_k4
+                     + x_k5[idx] * w_k5
+                     + x_k6[idx] * w_k6;
+            }
+        }
+    }
+
+    val += bias[oc];
+    val = val > 0.0f ? val : 0.0f;
+
+    out[b * (OC * os) + oc * os + j] = val;
+}
+
+
+__global__ void Conv1DKernelTiled9(
+    const float *in,
+    const float * __restrict__ w,
+    const float * __restrict__ bias,
+    float * __restrict__ out,
+    size_t B, size_t C, size_t s, size_t OC, size_t K) 
+{
+    // Output sequence length
+    size_t os = s - K + 1; // K=9 -> os = s - 8
+
+    size_t b = blockIdx.x;
+    size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+    size_t j = blockIdx.z * blockDim.x + threadIdx.x;
+
+    if (b >= B || oc >= OC || j >= os) return;
+
+    float val = 0.0f;
+
+    // Process C in chunks of 4
+    for (size_t c4 = 0; c4 < C; c4 += 4) {
+        float x_k0[4], x_k1[4], x_k2[4], x_k3[4], x_k4[4], x_k5[4], x_k6[4], x_k7[4], x_k8[4];
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                x_k0[idx] = in[b * (C * s) + c_index * s + (j + 0)];
+                x_k1[idx] = in[b * (C * s) + c_index * s + (j + 1)];
+                x_k2[idx] = in[b * (C * s) + c_index * s + (j + 2)];
+                x_k3[idx] = in[b * (C * s) + c_index * s + (j + 3)];
+                x_k4[idx] = in[b * (C * s) + c_index * s + (j + 4)];
+                x_k5[idx] = in[b * (C * s) + c_index * s + (j + 5)];
+                x_k6[idx] = in[b * (C * s) + c_index * s + (j + 6)];
+                x_k7[idx] = in[b * (C * s) + c_index * s + (j + 7)];
+                x_k8[idx] = in[b * (C * s) + c_index * s + (j + 8)];
+            } else {
+                x_k0[idx] = 0.0f;
+                x_k1[idx] = 0.0f;
+                x_k2[idx] = 0.0f;
+                x_k3[idx] = 0.0f;
+                x_k4[idx] = 0.0f;
+                x_k5[idx] = 0.0f;
+                x_k6[idx] = 0.0f;
+                x_k7[idx] = 0.0f;
+                x_k8[idx] = 0.0f;
+            }
+        }
+
+        #pragma unroll
+        for (int idx = 0; idx < 4; idx++) {
+            size_t c_index = c4 + idx;
+            if (c_index < C) {
+                float w_k0 = w[oc * (C * K) + c_index * K + 0];
+                float w_k1 = w[oc * (C * K) + c_index * K + 1];
+                float w_k2 = w[oc * (C * K) + c_index * K + 2];
+                float w_k3 = w[oc * (C * K) + c_index * K + 3];
+                float w_k4 = w[oc * (C * K) + c_index * K + 4];
+                float w_k5 = w[oc * (C * K) + c_index * K + 5];
+                float w_k6 = w[oc * (C * K) + c_index * K + 6];
+                float w_k7 = w[oc * (C * K) + c_index * K + 7];
+                float w_k8 = w[oc * (C * K) + c_index * K + 8];
+
+                val += x_k0[idx] * w_k0
+                     + x_k1[idx] * w_k1
+                     + x_k2[idx] * w_k2
+                     + x_k3[idx] * w_k3
+                     + x_k4[idx] * w_k4
+                     + x_k5[idx] * w_k5
+                     + x_k6[idx] * w_k6
+                     + x_k7[idx] * w_k7
+                     + x_k8[idx] * w_k8;
+            }
+        }
+    }
+
+    val += bias[oc];
+    val = val > 0.0f ? val : 0.0f;
+
+    out[b * (OC * os) + oc * os + j] = val;
+}
+
+// #define alpha 1024.0f
+
+// using wmma::fragment;
+// using wmma::load_matrix_sync;
+// using wmma::store_matrix_sync;
+// using wmma::fill_fragment;
+// using wmma::mma_sync;
+// using wmma::matrix_a;
+// using wmma::matrix_b;
+// using wmma::accumulator;
+
+// #include <mma.h>
+// using namespace nvcuda;
+
+// __global__ void Conv1DKernelTiled9(
+//     const float * __restrict__ in,
+//     const float * __restrict__ w,
+//     const float * __restrict__ bias,
+//     float * __restrict__ out,
+//     size_t B, size_t C, size_t s, size_t OC, size_t K)
+// {
+//     // For K=9, output sequence length = s - 8
+//     size_t os = (K <= s) ? (s - K + 1) : 0; 
+//     // If K > s, no valid output positions, os = 0
+
+//     size_t b  = blockIdx.x;
+//     size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+//     size_t j  = blockIdx.z * blockDim.x + threadIdx.x;
+
+//     // Out-of-bound checks
+//     if (b >= B || oc >= OC || j >= os) return;
+
+
+//     fragment<matrix_a, 16,16,16, half, wmma::row_major> a_frag;
+//     fragment<matrix_b, 16,16,16, half, wmma::col_major> b_frag;
+//     fragment<accumulator,16,16,16,float> c_frag;
+
+//     fill_fragment(c_frag, 0.0f);
+
+//     size_t total_length = C * K;
+//     // We'll process the (C*K) dimension in chunks of 16
+//     // If total_length is not a multiple of 16, we'll zero out extra parts
+
+//     // Similarly, if oc does not fall on a 16-tile boundary or exceeds OC, we handle that by zeroing out invalid entries.
+
+//     int oc_block = (int)((oc / 16) * 16); // Start of the 16-wide block of output channels
+//     // We'll handle partial blocks if oc or oc_block + col >= OC
+
+//     // Loop over the K dimension in steps of 16
+//     for (size_t k_base = 0; k_base < ((total_length + 15) / 16) * 16; k_base += 16) {
+//         half A_mat[16];      // 1x16 tile for A
+//         half B_mat[16*16];   // 16x16 tile for B
+
+//         // Load A:
+//         // For each col in [0..15], determine ck = k_base+col
+//         // If ck >= total_length, set to zero
+//         // Otherwise load in[b, c_idx, j+k_idx] if in range
+//         for (int col = 0; col < 16; col++) {
+//             size_t ck = k_base + col;
+//             half val_h;
+//             if (ck < total_length) {
+//                 size_t c_idx = ck / K;
+//                 size_t k_idx = ck % K;
+//                 float in_val = 0.0f;
+//                 if ((c_idx < C) && ((j + k_idx) < s)) {
+//                     in_val = in[b * (C * s) + c_idx * s + (j + k_idx)];
+//                 }
+//                 val_h = __float2half_rn(in_val * alpha);
+//             } else {
+//                 // Out of range in K dimension
+//                 val_h = __float2half_rn(0.0f);
+//             }
+//             A_mat[col] = val_h;
+//         }
+
+//         load_matrix_sync(a_frag, A_mat, 16);
+
+//         // Load B:
+//         // For B, rows correspond to ck in [k_base..k_base+15],
+//         // columns correspond to [oc_block..oc_block+15].
+//         for (int row = 0; row < 16; row++) {
+//             size_t ck = k_base + row;
+//             for (int col = 0; col < 16; col++) {
+//                 half val_h;
+//                 size_t oc_col = oc_block + col;
+//                 if (ck < total_length && (oc_col < OC)) {
+//                     size_t c_idx = ck / K;
+//                     size_t k_idx = ck % K;
+//                     float w_val = 0.0f;
+//                     if (c_idx < C && k_idx < K && oc_col < OC) {
+//                         w_val = w[oc_col*(C*K) + c_idx*K + k_idx];
+//                     }
+//                     val_h = __float2half_rn(w_val * alpha);
+//                 } else {
+//                     // Outside valid OC or CK range
+//                     val_h = __float2half_rn(0.0f);
+//                 }
+//                 B_mat[row*16 + col] = val_h;
+//             }
+//         }
+
+//         load_matrix_sync(b_frag, B_mat, 16);
+
+//         // Perform matrix multiply accumulate
+//         mma_sync(c_frag, a_frag, b_frag, c_frag);
+//     }
+
+//     // After accumulation:
+//     // The result is scaled by alpha*alpha
+//     float scale_back = 1.0f / (alpha * alpha);
+//     float result = c_frag.x[0] * scale_back;
+
+//     // Add bias if in range
+//     float bias_val = 0.0f;
+//     if (oc < OC) {
+//         bias_val = bias[oc];
+//     }
+//     result += bias_val;
+
+//     // Apply ReLU
+//     result = (result > 0.0f) ? result : 0.0f;
+
+//     // Store result if valid
+//     if (b < B && oc < OC && j < os) {
+//         out[b * (OC * os) + oc * os + j] = result;
+//     }
+// }
+
+
+
+// __global__ void Conv1DKernelTiled3(
+//     const float *in, const float *w, const float *bias, float *out,
+//     size_t B, size_t C, size_t s, size_t OC, size_t K) {
+    
+//     // Output sequence length
+//     size_t os = s - K + 1;
+
+//     // Batch index (each block processes one batch element)
+//     size_t b = blockIdx.x;
+
+//     // Output channel index
+//     size_t oc = blockIdx.y * blockDim.y + threadIdx.y;
+
+//     // Sequence position index (with tiling applied)
+//     size_t j_start = blockIdx.z * BLOCK_SIZE;
+//     size_t j_local = threadIdx.x;
+//     size_t j = j_start + j_local;
+
+//     // Ensure within bounds
+//     if (b >= B || oc >= OC || j >= os) return;
+
+//     // Shared memory for input tile
+//     __shared__ float in_tile[BLOCK_SIZE + 3-1];  // BLOCK_SIZE + K - 1 (to handle boundary cases)
+    
+//     // Accumulator for the convolution result
+//     float val = 0.0f;
+
+//     // Load the necessary input data into shared memory
+//     for (size_t c = 0; c < C; ++c) {
+//         // Load input data into shared memory
+//         if (j + threadIdx.x < s) {
+//             in_tile[threadIdx.x] = in[b * (C * s) + c * s + j + threadIdx.x];
+//         }
+//         __syncthreads();  // Ensure all threads have loaded their data
+
+//         // Perform the convolution for this output channel, sequence position, and batch
+//         for (size_t k = 0; k < K; ++k) {
+//             if (j + k < os) {
+//                 val += in_tile[j_local + k] * w[oc * (C * K) + c * K + k];
+//             }
+//         }
+//         __syncthreads();  // Synchronize before loading the next channel
+//     }
+
+//     val += bias[oc];
+//     // Apply ReLU activation and store the result in the output tensor
+//     out[b * (OC * os) + oc * os + j] = val > 0 ? val : 0;
+// }
 
 
 
@@ -799,47 +1238,194 @@ __global__ void LinearKernelTiled(const float *in, const float *w, const float *
 }
 
 
-__global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
-                                          size_t B, size_t N, size_t M) {
-    __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
+// __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
+//                                           size_t B, size_t N, size_t M) {
+//     __shared__ float tileIn[BLOCK_SIZE][BLOCK_SIZE];
+//     __shared__ float tileW[BLOCK_SIZE][BLOCK_SIZE];
 
-    // Batch index
+//     // Batch index
+//     size_t b = blockIdx.z;
+
+//     // Output and input feature indices
+//     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+//     size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+
+//     // Accumulator for dot product
+//     float val = 0.0f;
+
+//     // Loop over tiles
+//     for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
+//         // Load input tile (coalesced read)
+//         tileIn[threadIdx.y][threadIdx.x] = in[b * N + (t * BLOCK_SIZE + threadIdx.y)];
+
+//     // Load weight tile (coalesced read)
+//         tileW[threadIdx.y][threadIdx.x] = w[m * N + (t * BLOCK_SIZE + threadIdx.x)];
+
+//         __syncthreads();
+
+//         // Unroll the loop for better performance
+//         #pragma unroll
+//         for (int k = 0; k < BLOCK_SIZE; k++) {
+//             val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
+//         }
+
+//         __syncthreads();
+//     }
+
+//     // Apply ReLU and write the output (coalesced write)
+//     if (m < M && n < N) {
+//         out[b * M + m] = fmaxf(val + bias[m], 0.0f);
+//     }
+// }
+
+__global__ void LinearKernelTiledWithRelu(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M) 
+{
+    // Each block processes one batch element (z-dimension)
     size_t b = blockIdx.z;
 
-    // Output and input feature indices
+    // m: output feature index
     size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
-    size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
 
-    // Accumulator for dot product
+    // We only have one block in x-dim, since we loop over N tiles inside the kernel
+    // threadIdx.x indexes a chunk of 4 floats along N dimension
+    // nBase is the starting N index for this thread in float terms
+    size_t nBase = threadIdx.x * 4;
+
+    // Shared memory for tiles
+    __shared__ float4 tileIn[2][BLOCK_SIZE][BLOCK_SIZE/4]; 
+    __shared__ float4 tileW[2][BLOCK_SIZE][BLOCK_SIZE/4];
+
     float val = 0.0f;
+    int bufIdx = 0;
 
-    // Loop over tiles
-    for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
-        // Load input tile (coalesced read)
-        tileIn[threadIdx.y][threadIdx.x] = in[b * N + (t * BLOCK_SIZE + threadIdx.y)];
+    // Number of N-tiles
+    size_t numTiles = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    // Load weight tile (coalesced read)
-        tileW[threadIdx.y][threadIdx.x] = w[m * N + (t * BLOCK_SIZE + threadIdx.x)];
+    for (size_t t = 0; t < numTiles; t++) {
+        // Compute the N offset for this tile
+        size_t nOffset = t * BLOCK_SIZE;
+        
+        // Load W tile:
+        float4 wVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        size_t wN = nOffset + nBase; // wN is the global N index for w
+        if (m < M && (wN + 3) < N) {
+            wVal = *(const float4*)(&w[m * N + wN]);
+        }
+        tileW[bufIdx][threadIdx.y][threadIdx.x] = wVal;
+
+        // Load In tile:
+        // For 'in', we don't have M dimension. We just have B and N.
+        // Each thread will load one float4 from the input vector for the given batch element `b`.
+        float4 iVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        if (b < B && (wN + 3) < N) {
+            iVal = *(const float4*)(&in[b * N + wN]);
+        }
+
+        // Since in doesn't depend on m, but we have a tile shaped [BLOCK_SIZE][BLOCK_SIZE/4],
+        // we just replicate the same iVal for each threadIdx.y. This is redundant but simple.
+        tileIn[bufIdx][threadIdx.y][threadIdx.x] = iVal;
 
         __syncthreads();
 
-        // Unroll the loop for better performance
-        #pragma unroll
-        for (int k = 0; k < BLOCK_SIZE; k++) {
-            val += tileW[threadIdx.y][k] * tileIn[k][threadIdx.x];
+        // Dot product over the N chunk:
+        // We have BLOCK_SIZE floats in N dimension, grouped in float4, so BLOCK_SIZE/4 chunks.
+        for (int k = 0; k < BLOCK_SIZE/4; k++) {
+            float4 wVec = tileW[bufIdx][threadIdx.y][k];
+            float4 iVec = tileIn[bufIdx][threadIdx.y][k];
+            val += wVec.x * iVec.x + wVec.y * iVec.y + wVec.z * iVec.z + wVec.w * iVec.w;
         }
 
         __syncthreads();
+        bufIdx = 1 - bufIdx;
     }
 
-    // Apply ReLU and write the output (coalesced write)
-    if (m < M && n < N) {
-        out[b * M + m] = fmaxf(val + bias[m], 0.0f);
+    // Write the result if in range
+    // Only threadIdx.x == 0 corresponds to writing the result since we accumulate over all N 
+    if (b < B && m < M && threadIdx.x == 0) {
+        out[b * M + m] = val + bias[m] > 0? val + bias[m]: 0;
     }
 }
 
-// __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const float *bias, float *out,
+
+__global__ void LinearKernelTiled2(const float * __restrict__ in, 
+                                   const float * __restrict__ w, 
+                                   const float * __restrict__ bias, 
+                                   float * __restrict__ out,
+                                   size_t B, size_t N, size_t M) 
+{
+    // Each block processes one batch element (z-dimension)
+    size_t b = blockIdx.z;
+
+    // m: output feature index
+    size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+
+    // We only have one block in x-dim, since we loop over N tiles inside the kernel
+    // threadIdx.x indexes a chunk of 4 floats along N dimension
+    // nBase is the starting N index for this thread in float terms
+    size_t nBase = threadIdx.x * 4;
+
+    // Shared memory for tiles
+    __shared__ float4 tileIn[2][BLOCK_SIZE][BLOCK_SIZE/4]; 
+    __shared__ float4 tileW[2][BLOCK_SIZE][BLOCK_SIZE/4];
+
+    float val = 0.0f;
+    int bufIdx = 0;
+
+    // Number of N-tiles
+    size_t numTiles = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    for (size_t t = 0; t < numTiles; t++) {
+        // Compute the N offset for this tile
+        size_t nOffset = t * BLOCK_SIZE;
+        
+        // Load W tile:
+        float4 wVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        size_t wN = nOffset + nBase; // wN is the global N index for w
+        if (m < M && (wN + 3) < N) {
+            wVal = *(const float4*)(&w[m * N + wN]);
+        }
+        tileW[bufIdx][threadIdx.y][threadIdx.x] = wVal;
+
+        // Load In tile:
+        // For 'in', we don't have M dimension. We just have B and N.
+        // Each thread will load one float4 from the input vector for the given batch element `b`.
+        float4 iVal = make_float4(0.f, 0.f, 0.f, 0.f);
+        if (b < B && (wN + 3) < N) {
+            iVal = *(const float4*)(&in[b * N + wN]);
+        }
+
+        // Since in doesn't depend on m, but we have a tile shaped [BLOCK_SIZE][BLOCK_SIZE/4],
+        // we just replicate the same iVal for each threadIdx.y. This is redundant but simple.
+        tileIn[bufIdx][threadIdx.y][threadIdx.x] = iVal;
+
+        __syncthreads();
+
+        // Dot product over the N chunk:
+        // We have BLOCK_SIZE floats in N dimension, grouped in float4, so BLOCK_SIZE/4 chunks.
+        for (int k = 0; k < BLOCK_SIZE/4; k++) {
+            float4 wVec = tileW[bufIdx][threadIdx.y][k];
+            float4 iVec = tileIn[bufIdx][threadIdx.y][k];
+            val += wVec.x * iVec.x + wVec.y * iVec.y + wVec.z * iVec.z + wVec.w * iVec.w;
+        }
+
+        __syncthreads();
+        bufIdx = 1 - bufIdx;
+    }
+
+    // Write the result if in range
+    // Only threadIdx.x == 0 corresponds to writing the result since we accumulate over all N 
+    if (b < B && m < M && threadIdx.x == 0) {
+        out[b * M + m] = val + bias[m];
+    }
+}
+
+
+
+// __global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
 //                                   size_t B, size_t N, size_t M) {
 //     // Shared memory for storing tiles of input and weight matrices (double buffering)
 //     __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
@@ -889,68 +1475,11 @@ __global__ void LinearKernelTiledWithRelu(const float *in, const float *w, const
 //         bufIdx = 1 - bufIdx;
 //     }
 
-//     val += bias[m];
 //     // Write the result to the output tensor (if within bounds) and add bias
 //     if (m < M && n < N) {
-//         out[b * M + m] = val > 0? val : 0;
+//         out[b * M + m] = val + bias[m];
 //     }
 // }
-
-__global__ void LinearKernelTiled2(const float *in, const float *w, const float *bias, float *out,
-                                  size_t B, size_t N, size_t M) {
-    // Shared memory for storing tiles of input and weight matrices (double buffering)
-    __shared__ float tileIn[2][BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ float tileW[2][BLOCK_SIZE][BLOCK_SIZE];
-
-    // Batch index (each block processes one batch element)
-    size_t b = blockIdx.z;
-
-    // Output feature index (m) and input feature index (n) for the current thread
-    size_t m = blockIdx.y * BLOCK_SIZE + threadIdx.y;
-    size_t n = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-
-    // Accumulator for the dot product
-    float val = 0.0f;
-
-    // Double buffering index
-    int bufIdx = 0;
-
-    // Loop over tiles of the input and weight matrices
-    for (size_t t = 0; t < (N + BLOCK_SIZE - 1) / BLOCK_SIZE; t++) {
-        // Load a tile of the weight matrix into shared memory (if within bounds)
-        if (m < M && t * BLOCK_SIZE + threadIdx.x < N) {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = w[m * N + t * BLOCK_SIZE + threadIdx.x];
-        } else {
-            tileW[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        // Load a tile of the input matrix into shared memory (if within bounds)
-        if (n < N && t * BLOCK_SIZE + threadIdx.y < N) {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = in[b * N + t * BLOCK_SIZE + threadIdx.y];
-        } else {
-            tileIn[bufIdx][threadIdx.y][threadIdx.x] = 0.0f;
-        }
-
-        // Synchronize to ensure all threads have loaded their tiles
-        __syncthreads();
-
-        // Compute partial dot product for the current tile
-        for (int k = 0; k < BLOCK_SIZE; k++) {
-            val += tileW[bufIdx][threadIdx.y][k] * tileIn[bufIdx][k][threadIdx.x];
-        }
-
-        // Synchronize before loading the next tile
-        __syncthreads();
-
-        // Toggle the buffer index for double buffering
-        bufIdx = 1 - bufIdx;
-    }
-
-    // Write the result to the output tensor (if within bounds) and add bias
-    if (m < M && n < N) {
-        out[b * M + m] = val + bias[m];
-    }
-}
 
 
 #define SCALE 1.0f  // Example scaling factor; tune this based on your data

@@ -1,0 +1,18 @@
+Identifier: "MemoryWorkloadAnalysis_Deprecated"
+DisplayName: "(Deprecated) Memory Workload Analysis"
+Extends: "MemoryWorkloadAnalysis"
+Description: "Deprecated UI elements for backwards compatibility."
+Order: 1000
+Body {
+  DisplayName: "Memory Tables (Deprecated)"
+  Items {
+    MemoryFirstLevelCacheTable {
+      Label: "L1/TEX Cache (Deprecated)"
+    }
+  }
+  Items {
+    MemorySecondLevelCacheTable {
+      Label: "L2 Cache (Deprecated)"
+    }
+  }
+}

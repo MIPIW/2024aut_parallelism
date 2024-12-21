@@ -1,0 +1,1821 @@
+[2024-12-13 18:24:54,009] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+[2024-12-13 18:24:54,266] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-13 18:24:54,323] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-13 18:24:54,323] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+[2024-12-13 18:24:54,605] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-13 18:24:54,610] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-13 18:24:54,616] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-13 18:24:54,616] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+Warning: The cache directory for DeepSpeed Triton autotune, /home/s0/shpc125/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+[2024-12-13 18:25:31,154] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:31,154] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:31,161] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:31,163] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:31,325] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:31,336] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:31,863] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:31,869] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+Using the latest cached version of the dataset since wikitext couldn't be found on the Hugging Face Hub
+Found the latest cached dataset configuration 'wikitext-2-raw-v1' at /home/s0/shpc125/.cache/huggingface/datasets/wikitext/wikitext-2-raw-v1/0.0.0/b08601e04326c79dfdd32d625aee71d232d685c3 (last modified on Fri Dec 13 14:15:29 2024).
+[2024-12-13 18:25:47,907] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:47,912] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:51,126] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:51,126] [INFO] [comm.py:683:init_distributed] Initializing TorchBackend in DeepSpeed with backend nccl
+[2024-12-13 18:25:51,136] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed info: version=0.16.0, git-hash=unknown, git-branch=unknown
+[2024-12-13 18:25:51,136] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:51,152] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:51,158] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:52,418] [INFO] [comm.py:652:init_distributed] cdb=None
+[2024-12-13 18:25:52,424] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 8
+[2024-12-13 18:25:57,055] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed Flops Profiler Enabled: False
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Emitting ninja build file /home/s0/shpc125/.cache/torch_extensions/py38_cu118/cpu_adam/build.ninja...
+Using /home/s0/shpc125/.cache/torch_extensions/py38_cu118 as PyTorch extensions root...
+Building extension module cpu_adam...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 3.4203944206237793 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Loading extension module cpu_adam...
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 3.401609420776367 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Time to load cpu_adam op: 3.4354069232940674 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 3.2459042072296143 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+[2024-12-13 18:26:01,896] [INFO] [logging.py:128:log_dist] [Rank 0] Using DeepSpeed Optimizer param name adam as basic optimizer
+[2024-12-13 18:26:01,896] [INFO] [logging.py:128:log_dist] [Rank 0] Removing param_group that has no 'params' in the basic Optimizer
+[2024-12-13 18:26:01,954] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed Basic Optimizer = DeepSpeedCPUAdam
+[2024-12-13 18:26:01,954] [INFO] [utils.py:59:is_zero_supported_optimizer] Checking ZeRO support for optimizer=DeepSpeedCPUAdam type=<class 'deepspeed.ops.adam.cpu_adam.DeepSpeedCPUAdam'>
+[2024-12-13 18:26:01,954] [INFO] [logging.py:128:log_dist] [Rank 0] Creating torch.float32 ZeRO stage 2 optimizer
+[2024-12-13 18:26:01,955] [INFO] [stage_1_and_2.py:149:__init__] Reduce bucket size 500000000
+[2024-12-13 18:26:01,955] [INFO] [stage_1_and_2.py:150:__init__] Allgather bucket size 500000000
+[2024-12-13 18:26:01,955] [INFO] [stage_1_and_2.py:151:__init__] CPU Offload: True
+[2024-12-13 18:26:01,955] [INFO] [stage_1_and_2.py:152:__init__] Round robin gradient partitioning: False
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 5.8028199672698975 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 6.043678045272827 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Loading extension module cpu_adam...
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 5.986314535140991 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Time to load cpu_adam op: 6.0394628047943115 seconds
+Adam Optimizer #0 is created with AVX512 arithmetic capability.
+Config: alpha=0.000100, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+1 3391869952
+2 15020889600
+1 3391869952
+3 4953077760
+4 4953077760
+[2024-12-13 18:26:13,965] [INFO] [utils.py:781:see_memory_usage] Before initializing optimizer states
+[2024-12-13 18:26:13,967] [INFO] [utils.py:782:see_memory_usage] MA 3.16 GB         Max_MA 3.16 GB         CA 3.16 GB         Max_CA 3 GB 
+[2024-12-13 18:26:13,967] [INFO] [utils.py:789:see_memory_usage] CPU Virtual Memory:  used = 29.53 GB, percent = 6.3%
+1 3391869952
+2 15020889600
+1 3391869952
+[2024-12-13 18:26:14,621] [INFO] [utils.py:781:see_memory_usage] After initializing optimizer states
+[2024-12-13 18:26:14,623] [INFO] [utils.py:782:see_memory_usage] MA 3.16 GB         Max_MA 3.16 GB         CA 3.16 GB         Max_CA 3 GB 
+[2024-12-13 18:26:14,623] [INFO] [utils.py:789:see_memory_usage] CPU Virtual Memory:  used = 30.2 GB, percent = 6.4%
+[2024-12-13 18:26:14,623] [INFO] [stage_1_and_2.py:544:__init__] optimizer state initialized
+[2024-12-13 18:26:14,856] [INFO] [utils.py:781:see_memory_usage] After initializing ZeRO optimizer
+[2024-12-13 18:26:14,858] [INFO] [utils.py:782:see_memory_usage] MA 3.16 GB         Max_MA 3.16 GB         CA 3.16 GB         Max_CA 3 GB 
+[2024-12-13 18:26:14,858] [INFO] [utils.py:789:see_memory_usage] CPU Virtual Memory:  used = 30.22 GB, percent = 6.4%
+[2024-12-13 18:26:14,861] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed Final Optimizer = DeepSpeedZeroOptimizer
+[2024-12-13 18:26:14,861] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed using configured LR scheduler = None
+[2024-12-13 18:26:14,862] [INFO] [logging.py:128:log_dist] [Rank 0] DeepSpeed LR Scheduler = None
+[2024-12-13 18:26:14,862] [INFO] [logging.py:128:log_dist] [Rank 0] step=0, skipped=0, lr=[0.0001], mom=[(0.9, 0.999)]
+[2024-12-13 18:26:14,864] [INFO] [config.py:999:print] DeepSpeedEngine configuration:
+[2024-12-13 18:26:14,865] [INFO] [config.py:1003:print]   activation_checkpointing_config  {
+    "partition_activations": false, 
+    "contiguous_memory_optimization": false, 
+    "cpu_checkpointing": false, 
+    "number_checkpoints": null, 
+    "synchronize_checkpoint_boundary": false, 
+    "profile": false
+}
+[2024-12-13 18:26:14,865] [INFO] [config.py:1003:print]   aio_config ................... {'block_size': 1048576, 'queue_depth': 8, 'thread_count': 1, 'single_submit': False, 'overlap_events': True, 'use_gds': False}
+[2024-12-13 18:26:14,865] [INFO] [config.py:1003:print]   amp_enabled .................. False
+[2024-12-13 18:26:14,865] [INFO] [config.py:1003:print]   amp_params ................... False
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   autotuning_config ............ {
+    "enabled": false, 
+    "start_step": null, 
+    "end_step": null, 
+    "metric_path": null, 
+    "arg_mappings": null, 
+    "metric": "throughput", 
+    "model_info": null, 
+    "results_dir": "autotuning_results", 
+    "exps_dir": "autotuning_exps", 
+    "overwrite": true, 
+    "fast": true, 
+    "start_profile_step": 3, 
+    "end_profile_step": 5, 
+    "tuner_type": "gridsearch", 
+    "tuner_early_stopping": 5, 
+    "tuner_num_trials": 50, 
+    "model_info_path": null, 
+    "mp_size": 1, 
+    "max_train_batch_size": null, 
+    "min_train_batch_size": 1, 
+    "max_train_micro_batch_size_per_gpu": 1.024000e+03, 
+    "min_train_micro_batch_size_per_gpu": 1, 
+    "num_tuning_micro_batch_sizes": 3
+}
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   bfloat16_enabled ............. False
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   bfloat16_immediate_grad_update  False
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   checkpoint_parallel_write_pipeline  False
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   checkpoint_tag_validation_enabled  True
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   checkpoint_tag_validation_fail  False
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   comms_config ................. <deepspeed.comm.config.DeepSpeedCommsConfig object at 0x7fee471f0460>
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   communication_data_type ...... None
+[2024-12-13 18:26:14,866] [INFO] [config.py:1003:print]   compression_config ........... {'weight_quantization': {'shared_parameters': {'enabled': False, 'quantizer_kernel': False, 'schedule_offset': 0, 'quantize_groups': 1, 'quantize_verbose': False, 'quantization_type': 'symmetric', 'quantize_weight_in_forward': False, 'rounding': 'nearest', 'fp16_mixed_quantize': False, 'quantize_change_ratio': 0.001}, 'different_groups': {}}, 'activation_quantization': {'shared_parameters': {'enabled': False, 'quantization_type': 'symmetric', 'range_calibration': 'dynamic', 'schedule_offset': 1000}, 'different_groups': {}}, 'sparse_pruning': {'shared_parameters': {'enabled': False, 'method': 'l1', 'schedule_offset': 1000}, 'different_groups': {}}, 'row_pruning': {'shared_parameters': {'enabled': False, 'method': 'l1', 'schedule_offset': 1000}, 'different_groups': {}}, 'head_pruning': {'shared_parameters': {'enabled': False, 'method': 'topk', 'schedule_offset': 1000}, 'different_groups': {}}, 'channel_pruning': {'shared_parameters': {'enabled': False, 'method': 'l1', 'schedule_offset': 1000}, 'different_groups': {}}, 'layer_reduction': {'enabled': False}}
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   curriculum_enabled_legacy .... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   curriculum_params_legacy ..... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   data_efficiency_config ....... {'enabled': False, 'seed': 1234, 'data_sampling': {'enabled': False, 'num_epochs': 1000, 'num_workers': 0, 'curriculum_learning': {'enabled': False}}, 'data_routing': {'enabled': False, 'random_ltd': {'enabled': False, 'layer_token_lr_schedule': {'enabled': False}}}}
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   data_efficiency_enabled ...... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   dataloader_drop_last ......... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   disable_allgather ............ False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   dump_state ................... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   dynamic_loss_scale_args ...... None
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   eigenvalue_enabled ........... False
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   eigenvalue_gas_boundary_resolution  1
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   eigenvalue_layer_name ........ bert.encoder.layer
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   eigenvalue_layer_num ......... 0
+[2024-12-13 18:26:14,867] [INFO] [config.py:1003:print]   eigenvalue_max_iter .......... 100
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   eigenvalue_stability ......... 1e-06
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   eigenvalue_tol ............... 0.01
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   eigenvalue_verbose ........... False
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   elasticity_enabled ........... False
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   flops_profiler_config ........ {
+    "enabled": false, 
+    "recompute_fwd_factor": 0.0, 
+    "profile_step": 1, 
+    "module_depth": -1, 
+    "top_modules": 1, 
+    "detailed": true, 
+    "output_file": null
+}
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   fp16_auto_cast ............... None
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   fp16_enabled ................. False
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   fp16_master_weights_and_gradients  False
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   global_rank .................. 0
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   grad_accum_dtype ............. None
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   gradient_accumulation_steps .. 32
+[2024-12-13 18:26:14,868] [INFO] [config.py:1003:print]   gradient_clipping ............ 0.0
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   gradient_predivide_factor .... 1.0
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   graph_harvesting ............. False
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   hybrid_engine ................ enabled=False max_out_tokens=512 inference_tp_size=1 release_inference_cache=False pin_parameters=True tp_gather_partition_size=8
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   initial_dynamic_scale ........ 65536
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   load_universal_checkpoint .... False
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   loss_scale ................... 0
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   memory_breakdown ............. False
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   mics_hierarchial_params_gather  False
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   mics_shard_size .............. -1
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   monitor_config ............... tensorboard=TensorBoardConfig(enabled=False, output_path='', job_name='DeepSpeedJobName') comet=CometConfig(enabled=False, samples_log_interval=100, project=None, workspace=None, api_key=None, experiment_name=None, experiment_key=None, online=None, mode=None) wandb=WandbConfig(enabled=False, group=None, team=None, project='deepspeed') csv_monitor=CSVConfig(enabled=False, output_path='', job_name='DeepSpeedJobName')
+[2024-12-13 18:26:14,869] [INFO] [config.py:1003:print]   nebula_config ................ {
+    "enabled": false, 
+    "persistent_storage_path": null, 
+    "persistent_time_interval": 100, 
+    "num_of_version_in_retention": 2, 
+    "enable_nebula_load": true, 
+    "load_path": null
+}
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   optimizer_legacy_fusion ...... False
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   optimizer_name ............... adam
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   optimizer_params ............. {'lr': 0.0001}
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   pipeline ..................... {'stages': 'auto', 'partition': 'best', 'seed_layers': False, 'activation_checkpoint_interval': 0, 'pipe_partitioned': True, 'grad_partitioned': True}
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   pld_enabled .................. False
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   pld_params ................... False
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   prescale_gradients ........... False
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   scheduler_name ............... None
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   scheduler_params ............. None
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   seq_parallel_communication_data_type  torch.float32
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   sparse_attention ............. None
+[2024-12-13 18:26:14,870] [INFO] [config.py:1003:print]   sparse_gradients_enabled ..... False
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   steps_per_print .............. None
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   timers_config ................ enabled=True synchronized=True
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   train_batch_size ............. 512
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   train_micro_batch_size_per_gpu  2
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   use_data_before_expert_parallel_  False
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   use_node_local_storage ....... False
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   wall_clock_breakdown ......... False
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   weight_quantization_config ... None
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   world_size ................... 8
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   zero_allow_untested_optimizer  False
+[2024-12-13 18:26:14,871] [INFO] [config.py:1003:print]   zero_config .................. stage=2 contiguous_gradients=True reduce_scatter=True reduce_bucket_size=500000000 use_multi_rank_bucket_allreduce=True allgather_partitions=True allgather_bucket_size=500000000 overlap_comm=False load_from_fp32_weights=True elastic_checkpoint=False offload_param=None offload_optimizer=DeepSpeedZeroOffloadOptimizerConfig(device='cpu', nvme_path=None, buffer_count=4, pin_memory=True, pipeline_read=False, pipeline_write=False, fast_init=False, ratio=1.0) sub_group_size=1000000000 cpu_offload_param=None cpu_offload_use_pin_memory=None cpu_offload=None prefetch_bucket_size=50000000 param_persistence_threshold=100000 model_persistence_threshold=9223372036854775807 max_live_parameters=1000000000 max_reuse_distance=1000000000 gather_16bit_weights_on_model_save=False module_granularity_threshold=0 use_all_reduce_for_fetch_params=False stage3_gather_fp16_weights_on_model_save=False ignore_unused_parameters=True legacy_stage1=False round_robin_gradients=False zero_hpz_partition_size=1 zero_quantized_weights=False zero_quantized_nontrainable_weights=False zero_quantized_gradients=False mics_shard_size=-1 mics_hierarchical_params_gather=False memory_efficient_linear=True pipeline_loading_checkpoint=False override_module_apply=True
+[2024-12-13 18:26:14,872] [INFO] [config.py:1003:print]   zero_enabled ................. True
+[2024-12-13 18:26:14,872] [INFO] [config.py:1003:print]   zero_force_ds_cpu_optimizer .. True
+[2024-12-13 18:26:14,872] [INFO] [config.py:1003:print]   zero_optimization_stage ...... 2
+[2024-12-13 18:26:14,872] [INFO] [config.py:989:print_user_config]   json = {
+    "train_batch_size": 512, 
+    "train_micro_batch_size_per_gpu": 2, 
+    "zero_optimization": {
+        "stage": 2, 
+        "offload_optimizer": {
+            "device": "cpu", 
+            "pin_memory": true
+        }
+    }, 
+    "optimizer": {
+        "type": "Adam", 
+        "params": {
+            "lr": 0.0001
+        }
+    }
+}
+1 3391869952
+2 15020889600
+2 15020889600
+1 3391869952
+2 15020889600
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 3391869952
+1 3391869952
+3 4953077760
+4 4953077760
+2 15020889600
+2 15020889600
+2 15020889600
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+Epoch 1, Step 0, Loss: 9.604259490966797
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+Epoch 1, Step 10, Loss: 10.165953636169434
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+22 15029409792
+2 15029409792
+ 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4  49530777604953077760
+
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 150294097922
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+22  1502940979215029409792
+
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 49530777601
+ 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+ 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+Epoch 1, Step 20, Loss: 9.328632354736328
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+22 15029409792
+2 15029409792
+ 2 15029409792
+15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+Epoch 1, Step 30, Loss: 10.174578666687012
+1 4953077760
+1 4953077760
+11 4953077760
+ 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953106944
+3 4953108480
+3 4953108992
+3 4953108992
+3 4953107968
+3 4953089536
+3 4953108992
+3 4953108992
+4 4953077248
+4 4953077248
+4 4953077248
+4 4953077248
+4 4953077248
+4 4953077248
+4 4953077248
+4 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+1 4953077248
+2 15029409280
+2 15029409280
+2 15029409280
+2 15029409280
+2 15029409280
+2 15029409280
+2 15029409280
+2 15029409280
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+11 4953077760
+ 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+4 4953077760
+ 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+Epoch 1, Step 40, Loss: 4.086091041564941
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+22 15029409792
+ 15029409792
+2 2 15029409792
+15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+ 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+3 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+22 15029409792
+ 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+33 4953077760
+4 4953077760
+3 4953077760
+ 4953077760
+4 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+1 4953077760
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+2 15029409792
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+3 4953077760
+4 4953077760
+slurmstepd: error: *** JOB 1122100 ON a07 CANCELLED AT 2024-12-13T18:30:13 DUE TO TIME LIMIT ***
+srun: Job step aborted: Waiting up to 7 seconds for job step to finish.
+W1213 18:30:13.945958 140702086932288 torch/distributed/elastic/agent/server/api.py:688] Received Signals.SIGTERM death signal, shutting down workers
+W1213 18:30:13.947965 140702086932288 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 628347 closing signal SIGTERM
+--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/agent/server/api.py", line 680, in run
+    result = self._invoke_run(role)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/agent/server/api.py", line 835, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/api.py", line 79, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 628342 got signal: 15
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.8/logging/__init__.py", line 1085, in emit
+    msg = self.format(record)
+  File "/usr/lib/python3.8/logging/__init__.py", line 929, in format
+    return fmt.format(record)
+  File "/usr/local/lib/python3.8/dist-packages/torch/_logging/_internal.py", line 793, in format
+    f"{record.rankprefix}{shortlevel}{record.asctime}.{int(record.msecs*1000):06d} {record.thread} "
+  File "/usr/lib/python3.8/posixpath.py", line 472, in relpath
+    path_list = [x for x in abspath(path).split(sep) if x]
+  File "/usr/lib/python3.8/posixpath.py", line 381, in abspath
+    return normpath(path)
+  File "/usr/lib/python3.8/posixpath.py", line 366, in normpath
+    path = sep.join(comps)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/api.py", line 79, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 628342 got signal: 15
+Call stack:
+  File "/usr/local/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 348, in wrapper
+    return f(*args, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/run.py", line 901, in main
+    run(args)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/run.py", line 892, in run
+    elastic_launch(
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/launcher/api.py", line 133, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/launcher/api.py", line 255, in launch_agent
+    result = agent.run()
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/metrics/api.py", line 124, in wrapper
+    result = f(*args, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/agent/server/api.py", line 689, in run
+    self._shutdown(e.sigval)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/agent/server/local_elastic_agent.py", line 347, in _shutdown
+    self._pcontext.close(death_sig)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/api.py", line 544, in close
+    self._close(death_sig=death_sig, timeout=timeout)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/api.py", line 858, in _close
+    logger.warning(
+Message: 'Sending process %s closing signal %s'
+Arguments: (628348, 'SIGTERM')
+W1213 18:30:13.954225 140702086932288 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 628349 closing signal SIGTERM
+W1213 18:30:13.955206 140702086932288 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 628350 closing signal SIGTERM
+slurmstepd: error: *** STEP 1122100.0 ON a07 CANCELLED AT 2024-12-13T18:30:14 DUE TO TIME LIMIT ***
+W1213 18:30:14.443127 140391961167680 torch/distributed/elastic/agent/server/api.py:688] Received Signals.SIGTERM death signal, shutting down workers
+W1213 18:30:14.444118 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648113 closing signal SIGTERM
+W1213 18:30:14.444401 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648114 closing signal SIGTERM
+W1213 18:30:14.444561 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648115 closing signal SIGTERM
+W1213 18:30:14.444711 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648116 closing signal SIGTERM
+W1213 18:30:14.445198 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648113 closing signal SIGTERM
+W1213 18:30:14.445561 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648114 closing signal SIGTERM
+W1213 18:30:14.445736 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648115 closing signal SIGTERM
+W1213 18:30:14.445863 140391961167680 torch/distributed/elastic/multiprocessing/api.py:858] Sending process 648116 closing signal SIGTERM
