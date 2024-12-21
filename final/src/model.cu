@@ -27,10 +27,13 @@ using namespace nvcuda;
 #define BLOCK_SIZE_TC 16
 #define NUM_GPUS_PER_NODE 4
 // editable
-#define BATCH_SIZE 32 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
+#define BATCH_SIZE 64 // 최소 node(4) * batch개의 sentiment sample을 넣어야 함
 #define ELEMENTS_PER_THREAD 4  // Number of elements each thread will process
 #define BLOCK_SIZE 32
 #define NUM_STREAMS 5
+#define TILE_C 128      // Number of input channels processed per tile
+#define TILE_OC 8       // Number of output channels processed per tile
+#define TILE_J 32       // Number of output sequence positions processed per tile
 
 #define CUDA_CHECK(call)                                  \
     do {                                                  \
@@ -72,6 +75,9 @@ typedef struct {
 
     dim3 convBlockDim, convGridDim0, convGridDim1, convGridDim2, convGridDim3;
     dim3 convBlockDim0, convGridDim00;
+    dim3 convBlockDim1, convBlockDim2, convBlockDim3;
+    dim3 convGridDim01, convGridDim02, convGridDim03;
+
     int getMaxBlockDim1, getMaxGridDim1;
 
     int reluBlockDim1, reluGridDim1, reluBlockDim2, reluGridDim2;
@@ -112,8 +118,15 @@ void initializeGridAndBlockDimensions(GridBlockDims *dims) {
     dims->convBlockDim = dim3(BLOCK_SIZE, BLOCK_SIZE);
     dims->convGridDim0 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 3 + 1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-    dims->convBlockDim0 = dim3(BLOCK_SIZE, 4);  // 32 threads for sequence position, 4 for output channels
-    dims->convGridDim00 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 4 - 1) / 4, (SEQ_LEN - 3 + 1 + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dims->convBlockDim0 = dim3(14, 64, 1);
+    dims->convGridDim00 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 64 - 1) / 64, (SEQ_LEN -3 + 1 + 14 - 1) / 14);
+
+    dims->convBlockDim1 = dim3(12, 64, 1);
+    dims->convGridDim01 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 64 - 1) / 64, (SEQ_LEN -5 + 1 + 12 - 1) / 12);
+    dims->convBlockDim2 = dim3(10, 64, 1);
+    dims->convGridDim02 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 64 - 1) / 64, (SEQ_LEN -7 + 1 + 10 - 1) / 10);
+    dims->convBlockDim3 = dim3(8, 64, 1);
+    dims->convGridDim03 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + 64 - 1) / 64, (SEQ_LEN -9 + 1 + 8 - 1) / 8);
 
     dims->convGridDim1 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 5 + BLOCK_SIZE - 1) / BLOCK_SIZE);
     dims->convGridDim2 = dim3(BATCH_SIZE, (OUTPUT_CHANNEL + BLOCK_SIZE - 1) / BLOCK_SIZE, (SEQ_LEN - 7 + BLOCK_SIZE - 1) / BLOCK_SIZE);
@@ -523,30 +536,34 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
         // Conv1DReLUAndMaxPoolKernel<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, contexts[gpu_id].pool0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3, SEQ_LEN-2);
         
-        // Conv1DKernelTiled3<<<dims.convGridDim00, dims.convBlockDim0, 0, contexts[gpu_id].stream[0]>>>(
+        // float alpha = 8192.0f;
+        // float beta = 8192.0f;
+        // Conv1DKernelFloat4Tiled<<<dims.convGridDim00, dims.convBlockDim0, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
-        Conv1DKernelTiled<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream[0]>>>(
+        // Conv1DKernelTensorCore<<<dims.convGridDim00, dims.convBlockDim0, 0, contexts[gpu_id].stream[0]>>>(
+        //   contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3, alpha, beta);
+        // Conv1DKernelTiled<<<dims.convGridDim0, dims.convBlockDim, 0, contexts[gpu_id].stream[0]>>>(
+        //     contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
+
+        Conv1DKernelTiled3<<<dims.convGridDim00, dims.convBlockDim0, 0, contexts[gpu_id].stream[0]>>>(
             contexts[gpu_id].permute_ag, contexts[gpu_id].conv0_wg, contexts[gpu_id].conv0_bg, contexts[gpu_id].conv0_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 3);
-        // ReLUKernel<<<dims.reluGridDim1, dims.reluBlockDim1, 0, contexts[gpu_id].stream[0]>>>(
-        //     contexts[gpu_id].conv0_ag, conv0_a->num_elem());
         GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream[0]>>>(
             contexts[gpu_id].conv0_ag, contexts[gpu_id].pool0_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 2);
         // Conv2 (Kernel Size 5)
-        Conv1DKernelTiled<<<dims.convGridDim1, dims.convBlockDim, 0, contexts[gpu_id].stream[1]>>>(
+        Conv1DKernelTiled5<<<dims.convGridDim01, dims.convBlockDim1, 0, contexts[gpu_id].stream[1]>>>(
           contexts[gpu_id].permute_ag, contexts[gpu_id].conv1_wg, contexts[gpu_id].conv1_bg, contexts[gpu_id].conv1_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 5);
-        // ReLUKernel<<<dims.reluGridDim2, dims.reluBlockDim2, 0, contexts[gpu_id].stream[0]>>>(
-        //     contexts[gpu_id].conv1_ag, conv1_a->num_elem());
+          
         GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream[1]>>>(
             contexts[gpu_id].conv1_ag, contexts[gpu_id].pool1_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 4);
         // Conv2 (Kernel Size 7)
-        Conv1DKernelTiled<<<dims.convGridDim2, dims.convBlockDim, 0, contexts[gpu_id].stream[2]>>>(
+        Conv1DKernelTiled7<<<dims.convGridDim02, dims.convBlockDim2, 0, contexts[gpu_id].stream[2]>>>(
             contexts[gpu_id].permute_ag, contexts[gpu_id].conv2_wg, contexts[gpu_id].conv2_bg, contexts[gpu_id].conv2_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 7);
         // ReLUKernel<<<dims.reluGridDim3, dims.reluBlockDim3, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].conv2_ag, conv2_a->num_elem());
         GetMaxKernel<<<dims.getMaxGridDim1, dims.getMaxBlockDim1, 0, contexts[gpu_id].stream[2]>>>(
             contexts[gpu_id].conv2_ag, contexts[gpu_id].pool2_ag, BATCH_SIZE, OUTPUT_CHANNEL, SEQ_LEN - 6);
         // Conv3 (Kernel Size 9)
-        Conv1DKernelTiled<<<dims.convGridDim3, dims.convBlockDim, 0, contexts[gpu_id].stream[3]>>>(
+        Conv1DKernelTiled9<<<dims.convGridDim03, dims.convBlockDim3, 0, contexts[gpu_id].stream[3]>>>(
             contexts[gpu_id].permute_ag, contexts[gpu_id].conv3_wg, contexts[gpu_id].conv3_bg, contexts[gpu_id].conv3_ag, BATCH_SIZE, INPUT_CHANNEL, SEQ_LEN, OUTPUT_CHANNEL, 9);
         // ReLUKernel<<<dims.reluGridDim4, dims.reluBlockDim4, 0, contexts[gpu_id].stream[0]>>>(
         //     contexts[gpu_id].conv3_ag, conv3_a->num_elem());
