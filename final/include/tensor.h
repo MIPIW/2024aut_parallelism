@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <cstdio>
+#include <cuda_fp16.h>
+#include <cuda_runtime.h>
 
 using std::vector;
 
@@ -16,6 +18,10 @@ using std::vector;
       exit(EXIT_FAILURE);                                                \
     }                                                                    \
   } while (0)
+
+
+void convertFloatToHalf(float *input, half *output, size_t size);
+void convertHalfToFloat(half *input, float *output, size_t size);
 
 
 /* [Tensor Structure] */
