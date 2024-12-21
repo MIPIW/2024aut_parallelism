@@ -24,7 +24,7 @@ struct Tensor {
   size_t shape[4] = {0,0,0,0};
   float *buf = nullptr;
 
-  Tensor() = default;
+  Tensor() = default;  // Default constructor
   Tensor(const vector<size_t> &shape_);
   Tensor(const vector<size_t> &shape_, float *buf_);
   ~Tensor();
@@ -35,3 +35,4 @@ struct Tensor {
 
 typedef Tensor Parameter;
 typedef Tensor Activation;
+
