@@ -21,13 +21,14 @@ using std::vector;
 /* [Tensor Structure] */
 struct Tensor {
   size_t ndim = 0;
-  size_t shape[4];
+  size_t shape[4] = {0,0,0,0};
   float *buf = nullptr;
 
   Tensor() = default;  // Default constructor
   Tensor(const vector<size_t> &shape_);
   Tensor(const vector<size_t> &shape_, float *buf_);
   ~Tensor();
+
 
   size_t num_elem();
 };

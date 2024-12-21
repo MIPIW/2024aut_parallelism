@@ -1,12 +1,15 @@
 ////변경가능
 
 #include <mpi.h>
-
 #include <cstdio>
-
+#include <tensor.h>
 #include "layer.h"
 #include "model.h"
-
+#include <pthread.h>
+#include <cuda_runtime.h>
+#include <stdlib.h>
+#include <string.h>
+#define BATCH_SIZE 2
 
 /* [Model Parameters]
  * _w: Weight parameter
@@ -108,21 +111,21 @@ Activation *concat_a;
 Activation *linear0_a, *linear1_a, *linear2_a, *linear3_a;
 
 void alloc_activations() {
-  emb_a = new Activation({SEQ_LEN, 4096});
-  permute_a = new Activation({4096, SEQ_LEN});
-  conv0_a = new Activation({1024, SEQ_LEN - 2});
-  pool0_a = new Activation({1024});
-  conv1_a = new Activation({1024, SEQ_LEN - 4});
-  pool1_a = new Activation({1024});
-  conv2_a = new Activation({1024, SEQ_LEN - 6});
-  pool2_a = new Activation({1024});
-  conv3_a = new Activation({1024, SEQ_LEN - 8});
-  pool3_a = new Activation({1024});
-  concat_a = new Activation({4096});
-  linear0_a = new Activation({2048});
-  linear1_a = new Activation({1024});
-  linear2_a = new Activation({512});
-  linear3_a = new Activation({2});
+  emb_a = new Activation({BATCH_SIZE, SEQ_LEN, 4096});
+  permute_a = new Activation({BATCH_SIZE, 4096, SEQ_LEN});
+  conv0_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 2});
+  pool0_a = new Activation({BATCH_SIZE, 1024});
+  conv1_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 4});
+  pool1_a = new Activation({BATCH_SIZE, 1024});
+  conv2_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 6});
+  pool2_a = new Activation({BATCH_SIZE, 1024});
+  conv3_a = new Activation({BATCH_SIZE, 1024, SEQ_LEN - 8});
+  pool3_a = new Activation({BATCH_SIZE, 1024});
+  concat_a = new Activation({BATCH_SIZE, 4096});
+  linear0_a = new Activation({BATCH_SIZE, 2048});
+  linear1_a = new Activation({BATCH_SIZE, 1024});
+  linear2_a = new Activation({BATCH_SIZE, 512});
+  linear3_a = new Activation({BATCH_SIZE, 2});
 }
 
 void free_activations() {
@@ -143,6 +146,17 @@ void free_activations() {
   delete linear3_a;
 }
 
+// const int NUM_GPUES_PER_NODE = 4;
+// const int NUM_THREADS_PER_NODE = 4;
+
+typedef struct {
+  int gpu_id;
+  float *A;
+  float *B;
+  float *C;
+  int M, N, K;
+} ThreadData;
+
 /* [Model Computation: Sentiment Analysis Task] */
 void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   int mpi_rank, mpi_size;
@@ -151,18 +165,20 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
 
   // Calculate the number of samples per node
-  size_t samples_per_node = (n_samples + mpi_size - 1) / mpi_size; // Round up
-  size_t start_idx = mpi_rank * samples_per_node;
-  size_t end_idx = fmin(start_idx + samples_per_node, n_samples);
+  
+  // 총 16개, 노드당 4개, 배치당 2개, 총 2 배치
+  size_t samples_per_node = n_samples / mpi_size; 
+  // size_t start_idx = mpi_rank * samples_per_node;
+  // size_t end_idx = (mpi_rank + 1) * samples_per_node;
 
   // Allocate local buffers for input and output using cudaMallocHost
-  size_t local_n_samples = end_idx - start_idx;
-  int *local_inputs = nullptr;
-  float *local_outputs = nullptr;
+  int *local_inputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));
+  int *local_outputs = (int *)malloc(samples_per_node * SEQ_LEN * sizeof(int));  
 
   // Use cudaMallocHost for pinned memory
-  cudaMallocHost(&local_inputs, local_n_samples * SEQ_LEN * sizeof(int));
-  cudaMallocHost(&local_outputs, local_n_samples * N_CLASSES * sizeof(float));
+  //여기가 아닌것같은데 
+  // cudaMallocHost(&local_inputs, samples_per_node * SEQ_LEN * sizeof(int));
+  // cudaMallocHost(&local_outputs, samples_per_node * N_CLASSES * sizeof(float));
 
   // Scatter input data to all nodes
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
@@ -180,9 +196,12 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   //     /* Load a sentence from the inputs */
   //     int *single_input = inputs + n * SEQ_LEN;      
 
+  size_t num_batches = samples_per_node / BATCH_SIZE;
+  for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
+    int * batchInput = local_inputs + cur_batch * BATCH_SIZE * SEQ_LEN;
       /* in [SEQ_LEN] -> out [SEQ_LEN, 4096] */
-      Embedding(single_input, emb_w, emb_a);
-
+      Embedding(batchInput, emb_w, emb_a);
+      
       /* in [SEQ_LEN, 4096] -> out [4096, SEQ_LEN] */
       Permute(emb_a, permute_a);
 
@@ -235,25 +254,17 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
       /* in [512] -> out [2] */
       Linear(linear2_a, linear3_w, linear3_b, linear3_a);
 
-      /* The output 'linear3_a' (shape: [2]) contains the probabilities 
-        for each sentiment class (0: negative, 1: positive). To determine 
-        the sentiment, we can simply take the argmax of these probabilities. 
-      */
 
-//       /* Copy the computation result to the outputs */
-//       memcpy(outputs + n * 2, linear3_a->buf, 2 * sizeof(float));
-//     }
-//   }
-// }
-
-    memcpy(local_outputs + n * 2, linear3_a->buf, 2 * sizeof(float));
+    memcpy(local_outputs + cur_batch * BATCH_SIZE * 2, linear3_a->buf, BATCH_SIZE * 2 * sizeof(float));
   }
 
-  // Gather outputs from all nodes
-  MPI_Gather(local_outputs, local_n_samples * 2, MPI_FLOAT, outputs,
-             samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
+  // // Gather outputs from all nodes
+  MPI_Gather(local_outputs, samples_per_node * 2, MPI_FLOAT, outputs,
+            samples_per_node * 2, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
-  // Free local buffers
-  cudaFreeHost(local_inputs);
-  cudaFreeHost(local_outputs);
+  // // Free local buffers
+  // // cudaFreeHost(local_inputs);
+  // // cudaFreeHost(local_outputs);
+  free(local_inputs);
+  free(local_outputs);
 }
