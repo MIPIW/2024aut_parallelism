@@ -163,6 +163,7 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
+
   // Calculate the number of samples per node
   
   // 총 16개, 노드당 4개, 배치당 2개, 총 2 배치
@@ -181,7 +182,19 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
 
   // Scatter input data to all nodes
   MPI_Scatter(inputs, samples_per_node * SEQ_LEN, MPI_INT, local_inputs,
-              samples_per_node * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
+              local_n_samples * SEQ_LEN, MPI_INT, 0, MPI_COMM_WORLD);
+  
+  // Compute sentiment for the assigned subset
+  for (size_t n = 0; n < local_n_samples; n++) {
+    int *single_input = local_inputs + n * SEQ_LEN;
+
+  // int mpi_rank;
+  // MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  // if (mpi_rank == 0) { 
+  //   /* Predict sentiment for each sentence */
+  //   for (size_t n = 0; n < n_samples; n++) {
+  //     /* Load a sentence from the inputs */
+  //     int *single_input = inputs + n * SEQ_LEN;      
 
   size_t num_batches = samples_per_node / BATCH_SIZE;
   for (size_t cur_batch = 0; cur_batch < num_batches; ++cur_batch){
