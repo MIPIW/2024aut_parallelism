@@ -280,6 +280,9 @@ void predict_sentiment(int *inputs, float *outputs, size_t n_samples) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
+
+  // Calculate the number of samples per node
+  
   // 총 16개, 노드당 4개, 배치당 2개, 총 2 배치
   size_t samples_per_node = n_samples / mpi_size; 
 
